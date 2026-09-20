@@ -100,17 +100,26 @@ curl -LO https://github.com/gowtham980/jev-router/releases/download/v0.4.3/jev-r
 openclaw plugins install ./jev-router-0.4.3-release.tgz --accept-capabilities
 ```
 
-Then grant the explicit conversation-hook permission and reload the plugin:
+Then grant the explicit conversation-hook permission, enable native UI for
+user-installed plugins, and restart the Gateway:
 
 ```sh
 # Required for non-bundled plugins to receive routing and usage hooks:
 openclaw config set plugins.entries.jev-router.hooks.allowConversationAccess true
-openclaw plugins reload jev-router --json
+# Required for the Jev Router page to appear in Control UI:
+openclaw config set gateway.controlUi.experimental.customPlugins true
+openclaw gateway restart
 ```
 
 Open **Jev Router** in Control UI to connect Jev and choose models discovered
 from the selected agent's Gateway. Start in observe mode; route mode returns
 per-run provider/model overrides.
+
+Custom plugin UI is deliberately disabled by default on each Gateway. The
+backend can be loaded while its page remains hidden until the setting above is
+enabled. Open Control UI through HTTPS/Tailscale Serve or a browser-trusted
+loopback URL such as `http://127.0.0.1:18789/`; authenticated native plugin UI
+does not load over plain HTTP on a LAN address.
 
 Conversation access is an explicit permission: it lets the plugin receive prompt-bearing hooks. The router forwards only its bounded, redacted prompt excerpt to Jev. Without this permission, previews can work while automatic routing hooks are blocked. Verify with `openclaw plugins inspect jev-router --runtime --json`: `before_model_resolve` must appear and diagnostics must not report blocked hooks.
 

@@ -36,7 +36,8 @@ Provider-neutral, allowlisted model routing for OpenClaw 2026.9.5.
 ```sh
 openclaw plugins install ./jev-router-0.4.3-release.tgz --accept-capabilities
 openclaw config set plugins.entries.jev-router.hooks.allowConversationAccess true
-openclaw plugins reload jev-router --json
+openclaw config set gateway.controlUi.experimental.customPlugins true
+openclaw gateway restart
 openclaw plugins inspect jev-router --runtime --json
 ```
 
