@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.4
+
+- Document and package the required Custom plugin UI activation step for new Gateways.
+- Warn at startup when the backend is active but its native Control UI is disabled.
+- Add public package description, repository, issue tracker and discovery keywords.
+
 ## 0.4.3
 
 - Split the dashboard into Overview, Models and Logs tabs so large model catalogs no longer push history below the fold.

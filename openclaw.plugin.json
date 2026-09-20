@@ -2,7 +2,7 @@
   "id": "jev-router",
   "name": "Jev Router",
   "description": "Provider-neutral Jev routing with honest runtime telemetry.",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "configContracts": {
     "secretInputs": {
       "paths": [

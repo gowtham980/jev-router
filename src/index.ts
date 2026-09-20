@@ -16,6 +16,9 @@ const feature = defineFeaturePlugin({
   description:"Provider-neutral Jev routing with honest runtime telemetry.",
   setup(api, events) {
     const config = parseConfig(api.pluginConfig);
+    if (api.config.gateway?.controlUi?.experimental?.customPlugins !== true) {
+      api.logger?.warn("Jev Router dashboard is hidden until gateway.controlUi.experimental.customPlugins=true; restart the Gateway after enabling it.");
+    }
     let activeProfiles=config.profiles;
     let activeOptimization=config.optimization;
     let activeContinuity=config.continuity;

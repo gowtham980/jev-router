@@ -96,8 +96,8 @@ openclaw plugins install clawhub:openclaw-plugin-jev-router --accept-capabilitie
 Or install the exact GitHub release artifact:
 
 ```sh
-curl -LO https://github.com/gowtham980/jev-router/releases/download/v0.4.3/jev-router-0.4.3-release.tgz
-openclaw plugins install ./jev-router-0.4.3-release.tgz --accept-capabilities
+curl -LO https://github.com/gowtham980/jev-router/releases/download/v0.4.4/jev-router-0.4.4-release.tgz
+openclaw plugins install ./jev-router-0.4.4-release.tgz --accept-capabilities
 ```
 
 Then grant the explicit conversation-hook permission, enable native UI for

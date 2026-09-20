@@ -1,6 +1,21 @@
 {
   "name": "openclaw-plugin-jev-router",
-  "version": "0.4.3",
+  "version": "0.4.4",
+  "description": "Provider-neutral, quality-aware model routing for OpenClaw with cost-conscious profiles and native Control UI.",
+  "homepage": "https://github.com/gowtham980/jev-router#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gowtham980/jev-router.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gowtham980/jev-router/issues"
+  },
+  "keywords": [
+    "openclaw",
+    "model-routing",
+    "cost-optimization",
+    "jev"
+  ],
   "type": "module",
   "private": true,
   "scripts": {

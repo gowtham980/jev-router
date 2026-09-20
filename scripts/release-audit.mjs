@@ -12,12 +12,14 @@ const {redact}=await import(root+"/dist/router.js");
 const {hostAuth}=await import(root+"/dist/readiness.js");
 mock.method(hostAuth,"readStore",()=>({version:1,profiles:{"openai:test":{type:"api_key",provider:"openai",key:"synthetic-audit-only"}}}));
 const profiles=[{id:"deep",model:"openai/gpt-6-astra",thinking:"high",description:"Complex coding",input:["text"]}];
+const warnings=[];
 function host(mode){
  const hooks={},actions={};
  const values=new Map();
  const store={async register(key,value){values.delete(key);values.set(key,{key,value,createdAt:Date.now()});},async lookup(key){return values.get(key)?.value;},async entries(){return [...values.values()];},async clear(){values.clear();}};
  const config={agents:{defaults:{modelPolicy:{allow:["openai/*"]}},entries:{restricted:{modelPolicy:{allow:["ollama/*"]}}}}};
  plugin.register({id:"jev-router",config,pluginConfig:{mode,profiles},
+ logger:{warn(message){warnings.push(String(message));}},
  runtime:{state:{openKeyedStore:()=>store}},
  session:{controls:{registerSessionAction(a){actions[a.id]=a;}}},
  registerService(){},on(n,f){hooks[n]=f;},registerSessionAction(a){actions[a.id]=a;},registerTool(){}});
@@ -26,6 +28,7 @@ function host(mode){
 const checks=[];
 function check(name,pass){checks.push({name,pass});}
 const active=host("route");
+check("disabled custom plugin UI emits an actionable startup warning",warnings.some(message=>message.includes("gateway.controlUi.experimental.customPlugins=true")));
 const original=JSON.stringify(active.config);
 const selection=await active.hooks.before_model_resolve({prompt:"Debug a complex concurrency issue"},{runId:"audit",agentId:"coder"});
 check("route mode returns exact provider/model override",selection?.providerOverride==="openai"&&selection?.modelOverride==="gpt-6-astra");
