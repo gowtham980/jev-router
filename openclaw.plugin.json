@@ -1,0 +1,193 @@
+{
+  "id": "jev-router",
+  "name": "Jev Router",
+  "description": "Provider-neutral Jev routing with honest runtime telemetry.",
+  "version": "0.4.3",
+  "configContracts": {
+    "secretInputs": {
+      "paths": [
+        {
+          "path": "jevKey",
+          "expected": "string",
+          "ownerKind": "route"
+        }
+      ]
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": [
+          "observe",
+          "route"
+        ],
+        "default": "observe"
+      },
+      "optimization": {
+        "type": "string",
+        "enum": [
+          "quality",
+          "balanced",
+          "economy"
+        ],
+        "default": "balanced"
+      },
+      "continuity": {
+        "type": "boolean",
+        "default": true
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 10000,
+        "default": 2500
+      },
+      "minConfidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "default": 0.65
+      },
+      "maxPromptChars": {
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 16000,
+        "default": 6000
+      },
+      "jevKey": {
+        "oneOf": [
+          {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "provider",
+              "id"
+            ],
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "env",
+                  "store",
+                  "file",
+                  "exec"
+                ]
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            }
+          }
+        ]
+      },
+      "profiles": {
+        "type": "array",
+        "maxItems": 40,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "model",
+            "description",
+            "input"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,47}$"
+            },
+            "model": {
+              "type": "string",
+              "maxLength": 180
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "thinking": {
+              "type": "string",
+              "enum": [
+                "off",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "adaptive",
+                "max"
+              ]
+            },
+            "cost": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "quality": {
+              "type": "string",
+              "enum": [
+                "standard",
+                "strong",
+                "best"
+              ]
+            },
+            "input": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "image",
+                  "audio",
+                  "video",
+                  "document",
+                  "other"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "controlUi": {
+    "entry": "dist/control-ui/7f891c8c3a742c841901b593bf614da1a5f60bda5708857f1306b4878b6690d8/index.js",
+    "styles": [
+      "dist/control-ui/7f891c8c3a742c841901b593bf614da1a5f60bda5708857f1306b4878b6690d8/index.css"
+    ]
+  },
+  "contracts": {
+    "tools": [
+      "jev_router_preview"
+    ]
+  },
+  "toolMetadata": {
+    "jev_router_preview": {
+      "optional": true
+    }
+  }
+}

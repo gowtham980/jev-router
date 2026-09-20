@@ -1,0 +1,9 @@
+{
+  "mode": "observe",
+  "optimization": "balanced",
+  "continuity": true,
+  "timeoutMs": 2500,
+  "minConfidence": 0.65,
+  "maxPromptChars": 6000,
+  "profiles": []
+}

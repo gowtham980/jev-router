@@ -1,0 +1,50 @@
+{
+  "name": "openclaw-plugin-jev-router",
+  "version": "0.4.3",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json && openclaw plugins build",
+    "validate": "openclaw plugins validate --json",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.mjs && node scripts/release-audit.mjs",
+    "pack": "openclaw plugins pack --json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "scripts",
+    "test",
+    "tsconfig.json",
+    "openclaw.plugin.json",
+    "README.md",
+    "config.example.json",
+    "PRIVACY.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "openclaw": "2026.9.5"
+  },
+  "dependencies": {
+    "typebox": "1.3.17"
+  },
+  "devDependencies": {
+    "openclaw": "2026.9.5",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "@types/node": "25.0.3"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "controlUi": "./src/control-ui.ts",
+    "compat": {
+      "pluginApi": "2026.9.5"
+    },
+    "build": {
+      "openclawVersion": "2026.9.5"
+    }
+  },
+  "license": "MIT"
+}
