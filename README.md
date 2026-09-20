@@ -87,18 +87,30 @@ Runtime needs no new OpenAI API key.
 
 ## Installation and configuration
 
-Install the validated artifact through OpenClaw's normal plugin installer or
-artifact approval flow. Open **Jev Router** in Control UI to connect Jev and
-choose models discovered from the selected agent's Gateway. Start in observe
-mode; route mode returns per-run provider/model overrides.
+Install from ClawHub (recommended):
+
+```sh
+openclaw plugins install clawhub:openclaw-plugin-jev-router --accept-capabilities
+```
+
+Or install the exact GitHub release artifact:
 
 ```sh
 curl -LO https://github.com/gowtham980/jev-router/releases/download/v0.4.3/jev-router-0.4.3-release.tgz
 openclaw plugins install ./jev-router-0.4.3-release.tgz --accept-capabilities
+```
+
+Then grant the explicit conversation-hook permission and reload the plugin:
+
+```sh
 # Required for non-bundled plugins to receive routing and usage hooks:
 openclaw config set plugins.entries.jev-router.hooks.allowConversationAccess true
 openclaw plugins reload jev-router --json
 ```
+
+Open **Jev Router** in Control UI to connect Jev and choose models discovered
+from the selected agent's Gateway. Start in observe mode; route mode returns
+per-run provider/model overrides.
 
 Conversation access is an explicit permission: it lets the plugin receive prompt-bearing hooks. The router forwards only its bounded, redacted prompt excerpt to Jev. Without this permission, previews can work while automatic routing hooks are blocked. Verify with `openclaw plugins inspect jev-router --runtime --json`: `before_model_resolve` must appear and diagnostics must not report blocked hooks.
 
