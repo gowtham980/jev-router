@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileHistoryStore,HistoryStore} from "../dist/history.js";
 import {filePreferenceStore} from "../dist/preferences.js";
-import {parseConfig,candidates,continuationDecision,createRouter,modelAllowed,redact} from "../dist/router.js";
+import {parseConfig,candidates,continuationDecision,createRouter,credential as resolveCredential,decisionModelSelected,modelAllowed,modelRef,redact} from "../dist/router.js";
 import plugin from "../dist/index.js";
 import {hostAuth} from "../dist/readiness.js";
 const profiles=[
@@ -98,11 +98,11 @@ function stateStore(name=randomUUID()){
  const values=stores.get(name)??new Map();stores.set(name,values);
  return {async register(key,value){values.delete(key);values.set(key,{key,value,createdAt:Date.now()});},async lookup(key){return values.get(key)?.value;},async entries(){return [...values.values()];},async clear(){values.clear();}};
 }
-function harness(mode="observe",historyName=randomUUID(),initialProfiles=[]){
+function harness(mode="observe",historyName=randomUUID(),initialProfiles=[],{pluginConfig={},decisions,decisionModel}={}){
  const hooks={},actions={},services=[];
- const hostConfig={agents:{defaults:{models:{"openai/gpt-6-astra":{},"ollama/kimi-k3:cloud":{}},modelPolicy:{allow:["openai/*","ollama/*"]}}}};
+ const hostConfig={agents:{defaults:{models:{"openai/gpt-6-astra":{},"ollama/kimi-k3:cloud":{}},modelPolicy:{allow:["openai/*","ollama/*"]},...(decisionModel?{decisionModel}:{})}}};
  plugin.register({id:"jev-router",config:hostConfig,
-  pluginConfig:{mode,profiles:initialProfiles,jevKey:"synthetic-test-only"},runtime:{state:{openKeyedStore:options=>stateStore(historyName+":"+options.namespace)}},registerService:s=>services.push(s),
+  pluginConfig:{mode,profiles:initialProfiles,jevKey:"synthetic-test-only",...pluginConfig},runtime:{state:{openKeyedStore:options=>stateStore(historyName+":"+options.namespace)},...(decisions?{decisions}:{})},registerService:s=>services.push(s),
   session:{controls:{registerSessionAction:a=>{actions[a.id]=a;}}},
   on:(name,fn)=>{hooks[name]=fn;},registerSessionAction:a=>{actions[a.id]=a;},registerTool:()=>{},
  });
@@ -214,4 +214,105 @@ test("concurrent preference and credential saves preserve both updates and host 
  const saved=await stateStore(name+":preferences").lookup("preferences");
  assert.equal(saved.optimization,"economy");assert.equal(saved.continuity,false);assert.equal(saved.jevKey.source,"store");
  assert.equal(JSON.stringify(first.hostConfig),before);
+});
+
+test("configured key selects the matching decisions endpoint",async()=>{
+ assert.deepEqual(await resolveCredential(undefined,"sk-or-v1-test-only"),{key:"sk-or-v1-test-only",url:"https://openrouter.ai/api/alpha/decisions",model:"typesafe/jev-1.13"});
+ assert.deepEqual(await resolveCredential(undefined,"  tsk_test-only "),{key:"tsk_test-only",url:"https://api.typesafe.ai/v1/systemone",model:"jev-latest"});
+ await assert.rejects(resolveCredential(undefined,"   "),/credential_missing/);
+});
+
+test("host OpenRouter auth is the last credential fallback",async t=>{
+ const home=process.env.HOME;process.env.HOME=join(tmpdir(),randomUUID());
+ t.after(()=>{process.env.HOME=home;});
+ let asked=0;const host=async()=>{asked++;return " sk-or-v1-host-only ";};
+ assert.equal((await resolveCredential(undefined,"tsk_explicit",host)).key,"tsk_explicit");
+ assert.equal(asked,0);
+ assert.deepEqual(await resolveCredential(undefined,undefined,host),{key:"sk-or-v1-host-only",url:"https://openrouter.ai/api/alpha/decisions",model:"typesafe/jev-1.13"});
+ await assert.rejects(resolveCredential(undefined,undefined,async()=>{throw Error("auth store locked");}),/credential_missing/);
+ await assert.rejects(resolveCredential(undefined,undefined,async()=>undefined),/credential_missing/);
+});
+
+test("host decision runtime routes without a direct Jev request",async()=>{
+ let seen,fetched=false;
+ const hostDecisions=agentId=>({evaluate:async(batch,options)=>{seen={batch,options,agentId};return {status:"ok",result:{model:"jev",answers:{route:{type:"choice",choice:"complex",probabilities:{routine:0.1,complex:0.9}}}},provenance:{providerId:"typesafe",rubricVersion:"1",runtimeGeneration:"g"}};}});
+ const route=createRouter(config,{hostDecisions,credential,fetch:async()=>{fetched=true;return new Response("{}");}});
+ const decision=await route("Design the migration",profiles,"main");
+ assert.equal(fetched,false);
+ assert.equal(decision.model,"openai/gpt-6-astra");
+ assert.equal(decision.confidence,0.9);
+ assert.equal(seen.agentId,"main");
+ assert.equal(seen.options.agentId,"main");
+ assert.equal(seen.options.purpose,"jev-router.model-route");
+ assert.equal(seen.batch.questions.route.type,"choice");
+ assert.ok(seen.options.signal instanceof AbortSignal);
+});
+
+test("host decision outcomes and sources keep the current model on failure",async()=>{
+ const unavailable={evaluate:async()=>({status:"unavailable",reason:"circuit-open"})};
+ assert.equal((await createRouter(config,{hostDecisions:()=>unavailable})("task",profiles)).reason,"host_circuit_open");
+ assert.equal((await createRouter(parseConfig({profiles,decisionSource:"host"}),{hostDecisions:()=>undefined})("task",profiles)).reason,"host_decisions_unavailable");
+ let fetched=false;
+ const direct=createRouter(parseConfig({profiles,decisionSource:"direct"}),{hostDecisions:()=>unavailable,credential,fetch:async()=>{fetched=true;return new Response(JSON.stringify({answers:{route:{choice:"routine",confidence:0.9}}}));}});
+ assert.equal((await direct("task",profiles)).model,"ollama/kimi-k3:cloud");
+ assert.equal(fetched,true);
+});
+
+test("decisionModel selection follows agent overrides",()=>{
+ const cfg={agents:{defaults:{decisionModel:"typesafe/jev-latest"},entries:{quiet:{decisionModel:""},research:{}}}};
+ assert.equal(decisionModelSelected(cfg),true);
+ assert.equal(decisionModelSelected(cfg,"research"),true);
+ assert.equal(decisionModelSelected(cfg,"quiet"),false);
+ assert.equal(decisionModelSelected({agents:{}}),false);
+ assert.throws(()=>parseConfig({skipTriggers:"heartbeat"}),/skipTriggers/);
+ assert.deepEqual(parseConfig({skipTriggers:["heartbeat","heartbeat"]}).skipTriggers,["heartbeat"]);
+ assert.equal(parseConfig({}).decisionSource,"auto");
+});
+
+test("configured triggers keep the host model without classification",async t=>{
+ t.mock.method(hostAuth,"readStore",()=>({version:1,profiles:{"openai:test":{type:"api_key",provider:"openai",key:"synthetic"}}}));
+ let calls=0;t.mock.method(globalThis,"fetch",async()=>{calls++;return response("complex");});
+ const {hooks,actions}=harness("route",randomUUID(),[profiles[1]],{pluginConfig:{skipTriggers:["heartbeat"]}});
+ assert.equal(await hooks.before_model_resolve({prompt:"[OpenClaw heartbeat poll]"},{runId:"beat",trigger:"heartbeat"}),undefined);
+ assert.equal(calls,0);
+ assert.equal((await hooks.before_model_resolve({prompt:"Design it"},{runId:"user",trigger:"user"})).modelOverride,"gpt-6-astra");
+ const rows=(await actions.snapshot.handler({payload:{}})).result.records;
+ assert.equal(rows.find(row=>row.id==="beat").reason,"trigger_skipped");
+});
+test("runs without model observations are reported as not observed",async t=>{
+ t.mock.method(hostAuth,"readStore",()=>({version:1,profiles:{"openai:test":{type:"api_key",provider:"openai",key:"synthetic"}}}));
+ t.mock.method(globalThis,"fetch",async()=>response("complex"));
+ const {hooks,actions}=harness("route",randomUUID(),[profiles[1]]);
+ await hooks.before_model_resolve({prompt:"Design it"},{runId:"incognito"});
+ await hooks.agent_end({runId:"incognito",success:true,messages:[]},{});
+ const row=(await actions.snapshot.handler({payload:{}})).result.records.find(row=>row.id==="incognito");
+ assert.equal(row.status,"not_observed");
+});
+test("host decision runtime is used when the agent selects a decision model",async t=>{
+ t.mock.method(hostAuth,"readStore",()=>({version:1,profiles:{"openai:test":{type:"api_key",provider:"openai",key:"synthetic"}}}));
+ let calls=0;t.mock.method(globalThis,"fetch",async()=>{calls++;return response("complex");});
+ const decisions={evaluate:async()=>({status:"ok",result:{model:"jev",answers:{route:{type:"choice",choice:"complex",probabilities:{complex:1},confidence:0.99}}},provenance:{providerId:"typesafe",rubricVersion:"1",runtimeGeneration:"g"}})};
+ const {hooks,actions}=harness("route",randomUUID(),[profiles[1]],{decisions,decisionModel:"typesafe/jev-latest"});
+ assert.equal((await hooks.before_model_resolve({prompt:"Design it"},{runId:"host"})).modelOverride,"gpt-6-astra");
+ assert.equal(calls,0);
+ const health=(await actions.snapshot.handler({payload:{}})).result.health;
+ assert.equal(health.decisions,"host");assert.equal(health.credential,"configured");
+ const direct=harness("route",randomUUID(),[profiles[1]],{decisions});
+ assert.equal((await direct.actions.snapshot.handler({payload:{}})).result.health.decisions,"direct");
+});
+
+test("provider-qualified runtime model ids match configured profiles",async t=>{
+ assert.equal(modelRef("openrouter","openrouter/auto"),"openrouter/auto");
+ assert.equal(modelRef("openrouter","typesafe/jev-router"),"openrouter/typesafe/jev-router");
+ assert.equal(modelRef("openai","gpt-6-astra"),"openai/gpt-6-astra");
+ t.mock.method(hostAuth,"readStore",()=>({version:1,profiles:{"openrouter:test":{type:"api_key",provider:"openrouter",key:"synthetic"}}}));
+ t.mock.method(globalThis,"fetch",async()=>response("auto"));
+ const auto={id:"auto",model:"openrouter/auto",description:"Routine",cost:"low",quality:"standard",input:["text"]};
+ const {hooks,actions,hostConfig}=harness("route",randomUUID(),[auto]);
+ hostConfig.agents.defaults.modelPolicy.allow.push("openrouter/*");
+ const override=await hooks.before_model_resolve({prompt:"hello"},{runId:"or"});
+ assert.deepEqual(override,{providerOverride:"openrouter",modelOverride:"auto"});
+ await hooks.llm_input({runId:"or",provider:"openrouter",model:"openrouter/auto"});
+ const row=(await actions.snapshot.handler({payload:{}})).result.records.find(row=>row.id==="or");
+ assert.equal(row.observedModel,"openrouter/auto");assert.equal(row.status,"model_verified");
 });

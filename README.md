@@ -1,6 +1,6 @@
 # Jev Router
 
-OpenClaw **2026.9.5** feature plugin. Uses your existing TypeSafe/Jev (or OpenRouter)
+OpenClaw **2026.9.5+** feature plugin (tested on 2026.9.5 and 2026.9.8). Uses your existing TypeSafe/Jev (or OpenRouter)
 credential to choose from an explicit, provider-neutral set of model profiles
 with advisory thinking recommendations. Includes a native Control UI page and an
 optional preview tool.
@@ -71,7 +71,7 @@ replace provider authentication, retries or execution policy.
 
 ## Build and test
 
-Node 22+ (tested Node 25), npm, OpenClaw 2026.9.5.
+Node 22+ (Node 24.16+ for OpenClaw 2026.9.8; tested Node 24 and 25), npm, OpenClaw 2026.9.8 dev dependency.
 
 ```sh
 npm install --ignore-scripts
@@ -81,7 +81,9 @@ npm run validate
 openclaw plugins pack --root . --out ./jev-router.tgz --json
 ```
 
-OpenClaw is pinned to the tested registry version, 2026.9.5. Use npm ci for
+The development dependency is pinned to OpenClaw 2026.9.8. The published
+`openclaw.compat.pluginApi` is `>=2026.9.5`, so the same package installs on
+2026.9.5 and newer hosts. Use npm ci for
 a clean dependency installation from the portable lockfile.
 Runtime needs no new OpenAI API key.
 
@@ -139,6 +141,49 @@ Before classification, the router reads host auth state without refreshing or wr
 
 Each run is classified at most once. Subsequent retries/fallback attempts keep the host-selected candidate, preventing the hook from selecting the same failed model again. OpenClaw owns the configured fallback chain and execution policy.
 
+### Decision source (OpenClaw 2026.9.6+)
+
+`decisionSource` controls how the routing question reaches Jev:
+
+- `auto` (default): when the host exposes the decision runtime
+  (`api.runtime.decisions`, OpenClaw 2026.9.6+) **and** the owning agent has an
+  effective `decisionModel` (for example `typesafe/jev-latest` from the
+  official `@openclaw/typesafe` plugin), the router uses the host's provider,
+  credential, admission limits and circuit health. Otherwise it sends the
+  direct Jev request described below.
+- `host`: always use the host decision runtime; keep the current model when it
+  is unavailable or no `decisionModel` is selected.
+- `direct`: always use the plugin's own Jev credential.
+
+Host outcomes such as `circuit-open` or `rate-limited` are recorded as
+`host_circuit_open`, `host_rate_limited`, and so on. There is no automatic
+fallback between sources. The dashboard reports which source each agent uses.
+
+### Direct credentials
+
+A `jevKey` that starts with `sk-or-` is treated as an OpenRouter key and sent
+to OpenRouter's decisions endpoint (`typesafe/jev-1.13`); any other key uses
+TypeSafe's endpoint. The legacy `~/.openclaw/credentials/*_api_key` files keep
+working.
+
+With no `jevKey` and no credential file, the router falls back to the
+Gateway's own OpenRouter API-key auth (`api.runtime.modelAuth.resolveApiKeyForProvider`,
+the same credential your `openrouter/*` models use). It is resolved per request
+through host auth policy and never copied, stored, or returned to the dashboard.
+OAuth or token-mode OpenRouter auth is not used.
+
+### Skipping background triggers
+
+`skipTriggers` lists `ctx.trigger` values that should never be classified, for
+example `["heartbeat", "cron"]`. Those runs keep the host-selected model and are
+recorded as `trigger_skipped`. The default is `[]`.
+
+### Incognito sessions (OpenClaw 2026.9.8+)
+
+Incognito runs do not dispatch `llm_input`/`llm_output`, so the applied model
+cannot be verified. Their routing records finish as **Model not observed**
+(`not_observed`) instead of staying "Routing requested".
+
 Classifier failures retain the current model:
 missing keys, service errors, low confidence, busy router, oversized responses,
 and unsupported attachment types. Normal OpenClaw downstream auth/fallback
@@ -181,8 +226,10 @@ the exact configured choice pool; the plugin never selects an unlisted model.
 
 - Resolves the dashboard-managed key from OpenClaw's secret store. Existing
   ~/.openclaw/credentials/typesafe_api_key and openrouter_api_key files remain
-  supported for compatibility. Never prints or stores key values.
-- Sends only the redacted, bounded prompt to the fixed Jev endpoint. No system
+  supported for compatibility, then the Gateway's OpenRouter API-key auth is
+  used as a last resort. Never prints or stores key values.
+- Sends only the redacted, bounded prompt to the fixed Jev endpoint (or the
+  host decision runtime, see Decision source). No system
   prompt, history, tools, files, or attachments are forwarded.
 - Redaction is best-effort, NOT a guarantee that arbitrary private data is removed.
   Routing through a cloud classifier discloses that prompt excerpt to its provider.

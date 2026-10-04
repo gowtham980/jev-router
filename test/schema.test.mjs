@@ -11,4 +11,7 @@ test("runtime schema accepts routing config and rejects unknown settings",()=>{
  assert.equal(plugin.configSchema.safeParse({profiles:[],jevKey:{source:"store",provider:"default"}}).success,false);
  assert.equal(plugin.configSchema.safeParse({mode:"oops"}).success,false);
  assert.equal(plugin.configSchema.safeParse({apiKey:"do-not-store"}).success,false);
+ assert.equal(plugin.configSchema.safeParse({decisionSource:"host",skipTriggers:["heartbeat","cron"],profiles:[]}).success,true);
+ assert.equal(plugin.configSchema.safeParse({decisionSource:"remote",profiles:[]}).success,false);
+ assert.equal(plugin.configSchema.safeParse({skipTriggers:["Heart beat"],profiles:[]}).success,false);
 });

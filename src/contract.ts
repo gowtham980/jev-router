@@ -9,7 +9,7 @@ export const recordSchema = Type.Object({
   tokens: Type.Optional(Type.Number()),
 }, {additionalProperties:false});
 const healthSchema = Type.Object({
-  agentId: Type.Optional(text), credential: text, readyProfiles: Type.Number(),
+  agentId: Type.Optional(text), credential: text, decisions: text, readyProfiles: Type.Number(),
   totalProfiles: Type.Number(), gatewayModels:Type.Number(), catalogWarning:Type.Optional(text),
   fallbacks: Type.Array(text,{maxItems:20}), history: text,
 },{additionalProperties:false});

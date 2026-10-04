@@ -37,6 +37,18 @@ export const configSchema = {
       "maximum": 16000,
       "default": 6000
     },
+    "decisionSource": {
+      "type": "string",
+      "enum": ["auto", "host", "direct"],
+      "default": "auto"
+    },
+    "skipTriggers": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$"},
+      "default": []
+    },
     "jevKey": {
       "oneOf": [
         {

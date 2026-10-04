@@ -6,7 +6,7 @@ import "./control-ui.css";
 const labels:Record<string,string>={
   preview:"Preview",recommended:"Recommended",override_requested:"Routing requested",
   model_verified:"Model matched",model_not_applied:"Different model used",kept_current:"Kept current model",
-  observed_only:"Observed",run_failed:"Run failed",
+  observed_only:"Observed",run_failed:"Run failed",not_observed:"Model not observed",
 };
 
 export default defineControlUiPlugin({
@@ -282,7 +282,7 @@ export default defineControlUiPlugin({
           else{healthTitle.textContent="Routing is ready";healthNote.textContent=`Jev can choose between ${snapshot.health.readyProfiles} eligible ${snapshot.health.readyProfiles===1?"profile":"profiles"} for this agent.`;}
           setupState.textContent=credentialReady?"Connected":"Action required";setupSection.open=!credentialReady;setupSection.classList.toggle("attention",!credentialReady);
           setCard(routingCard,snapshot.mode==="route"?"On":"Observe only",`${snapshot.optimization[0].toUpperCase()+snapshot.optimization.slice(1)} optimization`,snapshot.mode==="route");
-          setCard(jevCard,snapshot.health.credential==="configured"?"Connected":"Needs attention",snapshot.health.credential==="configured"?"Credential found":snapshot.health.credential,snapshot.health.credential==="configured");
+          setCard(jevCard,snapshot.health.credential==="configured"?"Connected":"Needs attention",snapshot.health.credential==="configured"?(snapshot.health.decisions==="host"?"Using the host decision model":"Credential found"):snapshot.health.credential==="host_unavailable"?"Select a Decision model or use decisionSource=direct":snapshot.health.credential,snapshot.health.credential==="configured");
           setCard(modelsCard,`${snapshot.health.readyProfiles} of ${snapshot.health.totalProfiles}`,snapshot.health.readyProfiles?"Available to this agent":"No eligible model",snapshot.health.readyProfiles>0);
           setCard(gatewayCard,String(snapshot.health.gatewayModels),snapshot.health.catalogWarning??"Discovered for this agent",snapshot.health.gatewayModels>0);
           setCard(fallbackCard,String(snapshot.health.fallbacks.length),snapshot.health.fallbacks.length?snapshot.health.fallbacks.join(" → "):"No fallback configured",snapshot.health.fallbacks.length>0);

@@ -57,6 +57,25 @@
         "maximum": 16000,
         "default": 6000
       },
+      "decisionSource": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "host",
+          "direct"
+        ],
+        "default": "auto"
+      },
+      "skipTriggers": {
+        "type": "array",
+        "maxItems": 20,
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,47}$"
+        },
+        "default": []
+      },
       "jevKey": {
         "oneOf": [
           {
@@ -175,9 +194,9 @@
     "onStartup": true
   },
   "controlUi": {
-    "entry": "dist/control-ui/7f891c8c3a742c841901b593bf614da1a5f60bda5708857f1306b4878b6690d8/index.js",
+    "entry": "dist/control-ui/601a4787224a5527675857877e5afb43ba7c5ae00f6348f8ca721a8fd06dfd86/index.js",
     "styles": [
-      "dist/control-ui/7f891c8c3a742c841901b593bf614da1a5f60bda5708857f1306b4878b6690d8/index.css"
+      "dist/control-ui/601a4787224a5527675857877e5afb43ba7c5ae00f6348f8ca721a8fd06dfd86/index.css"
     ]
   },
   "contracts": {
