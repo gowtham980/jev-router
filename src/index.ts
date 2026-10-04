@@ -4,7 +4,7 @@ import { configSchema } from "./schema.js";
 import { randomUUID } from "node:crypto";
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { contract } from "./contract.js";
-import { candidates, continuationDecision, createRouter, credential, parseConfig, type Decision } from "./router.js";
+import { candidates, continuationDecision, createRouter, credential, decisionModelSelected, parseConfig, type Decision, type HostDecisions } from "./router.js";
 import { Continuity } from "./continuity.js";
 import { fileHistoryStore, HistoryStore, type RecordRow } from "./history.js";
 import { filePreferenceStore, keyedPreferenceStore, type PreferenceStore, type Preferences } from "./preferences.js";
@@ -17,7 +17,7 @@ const feature = defineFeaturePlugin({
   setup(api, events) {
     const config = parseConfig(api.pluginConfig);
     if (api.config.gateway?.controlUi?.experimental?.customPlugins !== true) {
-      api.logger?.warn("Jev Router dashboard is hidden until gateway.controlUi.experimental.customPlugins=true; restart the Gateway after enabling it.");
+      api.logger?.warn("Jev Router dashboard is hidden until gateway.controlUi.experimental.customPlugins=true (Labs → Custom plugin UI). OpenClaw 2026.9.8+ applies it live; older hosts need a Gateway restart.");
     }
     let activeProfiles=config.profiles;
     let activeOptimization=config.optimization;
@@ -37,7 +37,12 @@ const feature = defineFeaturePlugin({
       activeContinuity=saved.continuity;
       if(value.jevKey!==undefined)activeJevKey=parseConfig({...config,jevKey:value.jevKey}).jevKey;
     }).catch(()=>{/* keep validated plugin configuration */});
-    const decide = createRouter(config,{credential:()=>credential(api.config,activeJevKey),optimization:()=>activeOptimization});
+    // OpenClaw 2026.9.6+ exposes the host decision runtime; older hosts keep the direct Jev request.
+    const runtimeDecisions=(api.runtime as {decisions?:HostDecisions}).decisions;
+    const hostDecisions=(agentId?:string)=>runtimeDecisions && decisionModelSelected(api.config,agentId) ? runtimeDecisions : undefined;
+    const decisionPath=(agentId?:string)=>config.decisionSource==="direct" ? "direct"
+      : hostDecisions(agentId) ? "host" : config.decisionSource==="host" ? "host_unavailable" : "direct";
+    const decide = createRouter(config,{credential:()=>credential(api.config,activeJevKey),optimization:()=>activeOptimization,hostDecisions});
     const firstAttempt = oncePerRun();
     const rows = new Map<string,RecordRow>();
     const continuity=new Continuity();
@@ -78,14 +83,18 @@ const feature = defineFeaturePlugin({
       // Do not reroute host fallback attempts, including after the first attempt failed.
       if (!firstAttempt(ctx.runId)) return;
       const id = ctx.runId!;
+      if (ctx.trigger && config.skipTriggers.includes(ctx.trigger)) {
+        await put(make({reason:"trigger_skipped",latencyMs:0},id,"kept_current"));
+        return;
+      }
       const sessionKey=ctx.sessionKey?JSON.stringify([ctx.agentId??"",ctx.sessionKey]):undefined;
       const previous=continuity.begin(id,sessionKey);
       await loaded;
       const revision=preferenceRevision;
       const profiles=await eligible(ctx.agentId,event.attachments);
       let decision = activeContinuity&&sessionKey
-        ? continuationDecision(event.prompt,profiles,previous)??await decide(event.prompt,profiles)
-        : await decide(event.prompt,profiles);
+        ? continuationDecision(event.prompt,profiles,previous)??await decide(event.prompt,profiles,ctx.agentId)
+        : await decide(event.prompt,profiles,ctx.agentId);
       if(revision!==preferenceRevision || !continuity.owns(id,sessionKey))decision={reason:"routing_context_changed",latencyMs:decision.latencyMs};
       const selected=profiles.find(profile=>profile.id===decision.profile && profile.model===decision.model);
       if(activeContinuity&&selected)continuity.select(id,selected);
@@ -125,6 +134,8 @@ const feature = defineFeaturePlugin({
       continuity.finish(id,event.success);
       const row=id ? rows.get(id) ?? await history.get(id) : undefined;
       if(row && !event.success) { row.status="run_failed"; await put(row); }
+      // Incognito runs (OpenClaw 2026.9.8+) emit no llm_input/llm_output, so the applied model is unknown.
+      else if(row && !row.observedModel && ["override_requested","recommended"].includes(row.status)) { row.status="not_observed"; await put(row); }
     });
     api.on("session_end",(event,ctx)=>{const key=event.sessionKey??ctx.sessionKey;if(key)continuity.end(JSON.stringify([ctx.agentId??"",key]));});
     const agentConfig = (agentId?:string) => agentId ? api.config.agents?.entries?.[agentId] : undefined;
@@ -229,8 +240,10 @@ const feature = defineFeaturePlugin({
         const available=await eligible(agentId);
         let catalog:{models:GatewayModel[];warning?:string}={models:[]};
         try { catalog=await discoverModels(agentId); } catch { catalog={models:[],warning:"Gateway model discovery is temporarily unavailable."}; }
+        const decisions=decisionPath(agentId);
         let credentialStatus="configured";
-        try { await credential(api.config,activeJevKey); } catch (error) { credentialStatus=(error as Error).message==="credential_missing" ? "missing" : "unreadable"; }
+        if(decisions==="host_unavailable")credentialStatus="host_unavailable";
+        else if(decisions==="direct"){try { await credential(api.config,activeJevKey); } catch (error) { credentialStatus=(error as Error).message==="credential_missing" ? "missing" : "unreadable"; }}
         return { mode:config.mode,optimization:activeOptimization,continuity:activeContinuity,
         limitations:[
           "Thinking selection is advisory: this host has no per-turn thinking override hook.",
@@ -239,7 +252,7 @@ const feature = defineFeaturePlugin({
           "Tokens are reported usage, not remaining Pro allowance.",
           "Task continuity stores only the prior route and failure counters in memory; no prompt history is retained.",
         ],
-        health:{...(agentId?{agentId}:{}),credential:credentialStatus,readyProfiles:available.length,totalProfiles:activeProfiles.length,
+        health:{...(agentId?{agentId}:{}),credential:credentialStatus,decisions,readyProfiles:available.length,totalProfiles:activeProfiles.length,
           gatewayModels:catalog.models.length,...(catalog.warning?{catalogWarning:catalog.warning}:{}),
           fallbacks:fallbacks(agentId),history:history.backend},
         profiles: profileStatuses(activeProfiles,api.config.agents?.defaults?.modelPolicy?.allow,
@@ -250,7 +263,7 @@ const feature = defineFeaturePlugin({
       preview: async ({prompt,agentId:requestedAgentId},ctx) => {
         const agentId=requestedAgentId ?? (ctx.source==="tool" ? ctx.tool.agentId
           : ctx.source==="session-action" ? ctx.action.agentId : undefined);
-        return put(make(await decide(prompt,await eligible(agentId)),randomUUID(),"preview"));
+        return put(make(await decide(prompt,await eligible(agentId),agentId),randomUUID(),"preview"));
       },
       clear_history: async () => { rows.clear(); await history.clear(); publish(); return {cleared:true}; },
     };
