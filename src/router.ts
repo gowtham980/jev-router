@@ -90,6 +90,12 @@ export function continuationDecision(prompt:string,profiles:Profile[],previous:S
   return {profile:current.id,model:current.model,thinking:current.thinking,reason:"session_continuation",latencyMs:0};
 }
 
+// Runtime events can report provider-qualified ids (OpenRouter reports "openrouter/auto" for the
+// catalog entry "auto"), so avoid producing "openrouter/openrouter/auto".
+export function modelRef(provider: string, model: string) {
+  return model.startsWith(provider + "/") ? model : provider + "/" + model;
+}
+
 // Only explicit configured profiles are candidates; catalog presence is not proof of authorization.
 export function modelAllowed(model: string, allowed: string[] | undefined) {
   return !allowed || allowed.some(rule => {

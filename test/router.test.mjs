@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileHistoryStore,HistoryStore} from "../dist/history.js";
 import {filePreferenceStore} from "../dist/preferences.js";
-import {parseConfig,candidates,continuationDecision,createRouter,credential as resolveCredential,decisionModelSelected,modelAllowed,redact} from "../dist/router.js";
+import {parseConfig,candidates,continuationDecision,createRouter,credential as resolveCredential,decisionModelSelected,modelAllowed,modelRef,redact} from "../dist/router.js";
 import plugin from "../dist/index.js";
 import {hostAuth} from "../dist/readiness.js";
 const profiles=[
@@ -299,4 +299,20 @@ test("host decision runtime is used when the agent selects a decision model",asy
  assert.equal(health.decisions,"host");assert.equal(health.credential,"configured");
  const direct=harness("route",randomUUID(),[profiles[1]],{decisions});
  assert.equal((await direct.actions.snapshot.handler({payload:{}})).result.health.decisions,"direct");
+});
+
+test("provider-qualified runtime model ids match configured profiles",async t=>{
+ assert.equal(modelRef("openrouter","openrouter/auto"),"openrouter/auto");
+ assert.equal(modelRef("openrouter","typesafe/jev-router"),"openrouter/typesafe/jev-router");
+ assert.equal(modelRef("openai","gpt-6-astra"),"openai/gpt-6-astra");
+ t.mock.method(hostAuth,"readStore",()=>({version:1,profiles:{"openrouter:test":{type:"api_key",provider:"openrouter",key:"synthetic"}}}));
+ t.mock.method(globalThis,"fetch",async()=>response("auto"));
+ const auto={id:"auto",model:"openrouter/auto",description:"Routine",cost:"low",quality:"standard",input:["text"]};
+ const {hooks,actions,hostConfig}=harness("route",randomUUID(),[auto]);
+ hostConfig.agents.defaults.modelPolicy.allow.push("openrouter/*");
+ const override=await hooks.before_model_resolve({prompt:"hello"},{runId:"or"});
+ assert.deepEqual(override,{providerOverride:"openrouter",modelOverride:"auto"});
+ await hooks.llm_input({runId:"or",provider:"openrouter",model:"openrouter/auto"});
+ const row=(await actions.snapshot.handler({payload:{}})).result.records.find(row=>row.id==="or");
+ assert.equal(row.observedModel,"openrouter/auto");assert.equal(row.status,"model_verified");
 });

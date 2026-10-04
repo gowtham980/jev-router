@@ -4,7 +4,7 @@ import { configSchema } from "./schema.js";
 import { randomUUID } from "node:crypto";
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { contract } from "./contract.js";
-import { candidates, continuationDecision, createRouter, credential, decisionModelSelected, parseConfig, type Decision, type HostDecisions } from "./router.js";
+import { candidates, continuationDecision, createRouter, credential, decisionModelSelected, modelRef, parseConfig, type Decision, type HostDecisions } from "./router.js";
 import { Continuity } from "./continuity.js";
 import { fileHistoryStore, HistoryStore, type RecordRow } from "./history.js";
 import { filePreferenceStore, keyedPreferenceStore, type PreferenceStore, type Preferences } from "./preferences.js";
@@ -126,13 +126,13 @@ const feature = defineFeaturePlugin({
       }
       await put(row);
     };
-    api.on("llm_input",(event) => observe(event.runId,event.provider+"/"+event.model));
-    api.on("llm_output",(event) => observe(event.runId,event.provider+"/"+event.model,event.reasoningEffort,event.usage?.total));
+    api.on("llm_input",(event) => observe(event.runId,modelRef(event.provider,event.model)));
+    api.on("llm_output",(event) => observe(event.runId,modelRef(event.provider,event.model),event.reasoningEffort,event.usage?.total));
     api.on("after_tool_call",(event,ctx)=>continuity.failure(event.runId??ctx.runId,event.error,event.toolCallId));
     api.on("model_call_ended",(event,ctx)=>{if(event.outcome==="error"&&!event.failureKind)continuity.failure(event.runId??ctx.runId,event.errorCategory,event.callId);});
     api.on("reply_payload_sending",async (event) => {
       const state=event.usageState;
-      if(state?.provider && state.model) await observe(event.runId,state.provider+"/"+state.model,state.reasoningEffort,state.usage?.total);
+      if(state?.provider && state.model) await observe(event.runId,modelRef(state.provider,state.model),state.reasoningEffort,state.usage?.total);
     });
     api.on("agent_end",async (event,ctx) => {
       const id=event.runId ?? ctx.runId;
