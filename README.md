@@ -166,6 +166,12 @@ to OpenRouter's decisions endpoint (`typesafe/jev-1.13`); any other key uses
 TypeSafe's endpoint. The legacy `~/.openclaw/credentials/*_api_key` files keep
 working.
 
+With no `jevKey` and no credential file, the router falls back to the
+Gateway's own OpenRouter API-key auth (`api.runtime.modelAuth.resolveApiKeyForProvider`,
+the same credential your `openrouter/*` models use). It is resolved per request
+through host auth policy and never copied, stored, or returned to the dashboard.
+OAuth or token-mode OpenRouter auth is not used.
+
 ### Skipping background triggers
 
 `skipTriggers` lists `ctx.trigger` values that should never be classified, for
@@ -220,7 +226,8 @@ the exact configured choice pool; the plugin never selects an unlisted model.
 
 - Resolves the dashboard-managed key from OpenClaw's secret store. Existing
   ~/.openclaw/credentials/typesafe_api_key and openrouter_api_key files remain
-  supported for compatibility. Never prints or stores key values.
+  supported for compatibility, then the Gateway's OpenRouter API-key auth is
+  used as a last resort. Never prints or stores key values.
 - Sends only the redacted, bounded prompt to the fixed Jev endpoint (or the
   host decision runtime, see Decision source). No system
   prompt, history, tools, files, or attachments are forwarded.

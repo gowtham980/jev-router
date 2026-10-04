@@ -108,7 +108,9 @@ export function redact(text: string) {
     .replace(/((?:["']?(?:api[_-]?key|password|secret|access[_-]?token)["']?)\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/gi, "$1[redacted]");
 }
 
-export async function credential(config?:OpenClawConfig,configured?:unknown) {
+const openRouterDecisions = {url:"https://openrouter.ai/api/alpha/decisions",model:"typesafe/jev-1.13"};
+// hostOpenRouterKey resolves the Gateway's own OpenRouter credential through host auth policy; nothing is copied or stored.
+export async function credential(config?:OpenClawConfig,configured?:unknown,hostOpenRouterKey?:()=>Promise<string|undefined>) {
   if (configured !== undefined) {
     const resolved=typeof configured==="string" ? configured : config
       ? (await resolveConfiguredSecretInputString({
@@ -117,7 +119,7 @@ export async function credential(config?:OpenClawConfig,configured?:unknown) {
         })).value : undefined;
     const key=resolved?.trim();
     // OpenRouter keys must use OpenRouter's decisions endpoint; TypeSafe rejects them.
-    if (key?.startsWith("sk-or-")) return {key,url:"https://openrouter.ai/api/alpha/decisions",model:"typesafe/jev-1.13"};
+    if (key?.startsWith("sk-or-")) return {key,...openRouterDecisions};
     if (key) return {key,url:"https://api.typesafe.ai/v1/systemone",model:"jev-latest"};
     throw Error("credential_missing");
   }
@@ -132,6 +134,9 @@ export async function credential(config?:OpenClawConfig,configured?:unknown) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw Error("credential_unreadable");
     }
   }
+  let hostKey: string | undefined;
+  try { hostKey = (await hostOpenRouterKey?.())?.trim(); } catch { /* unavailable host auth is a missing credential */ }
+  if (hostKey) return {key:hostKey,...openRouterDecisions};
   throw Error("credential_missing");
 }
 // Host decisions apply only when the host exposes the runtime and the agent has a decisionModel.

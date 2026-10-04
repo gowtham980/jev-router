@@ -222,6 +222,17 @@ test("configured key selects the matching decisions endpoint",async()=>{
  await assert.rejects(resolveCredential(undefined,"   "),/credential_missing/);
 });
 
+test("host OpenRouter auth is the last credential fallback",async t=>{
+ const home=process.env.HOME;process.env.HOME=join(tmpdir(),randomUUID());
+ t.after(()=>{process.env.HOME=home;});
+ let asked=0;const host=async()=>{asked++;return " sk-or-v1-host-only ";};
+ assert.equal((await resolveCredential(undefined,"tsk_explicit",host)).key,"tsk_explicit");
+ assert.equal(asked,0);
+ assert.deepEqual(await resolveCredential(undefined,undefined,host),{key:"sk-or-v1-host-only",url:"https://openrouter.ai/api/alpha/decisions",model:"typesafe/jev-1.13"});
+ await assert.rejects(resolveCredential(undefined,undefined,async()=>{throw Error("auth store locked");}),/credential_missing/);
+ await assert.rejects(resolveCredential(undefined,undefined,async()=>undefined),/credential_missing/);
+});
+
 test("host decision runtime routes without a direct Jev request",async()=>{
  let seen,fetched=false;
  const hostDecisions=agentId=>({evaluate:async(batch,options)=>{seen={batch,options,agentId};return {status:"ok",result:{model:"jev",answers:{route:{type:"choice",choice:"complex",probabilities:{routine:0.1,complex:0.9}}}},provenance:{providerId:"typesafe",rubricVersion:"1",runtimeGeneration:"g"}};}});

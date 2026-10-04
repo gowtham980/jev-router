@@ -5,6 +5,7 @@
 - Support OpenClaw 2026.9.8: `compat.pluginApi` is now `>=2026.9.5` (an exact version blocked installs on newer hosts); the dev dependency and build use 2026.9.8.
 - Add `decisionSource` (`auto`/`host`/`direct`). On OpenClaw 2026.9.6+, `auto` uses the host decision runtime when the agent has a `decisionModel`, and the direct Jev request otherwise.
 - Send `jevKey` values that start with `sk-or-` to OpenRouter's decisions endpoint instead of TypeSafe's.
+- Fall back to the Gateway's own OpenRouter API-key auth (`api.runtime.modelAuth.resolveApiKeyForProvider`) when no `jevKey` or credential file is set, so OpenRouter users need no extra key setup.
 - Add `skipTriggers` so heartbeat, cron or other trigger runs keep the host model without classification.
 - Mark runs with no model observation (OpenClaw 2026.9.8 incognito sessions) as `not_observed`.
 - Note in the Custom plugin UI warning that OpenClaw 2026.9.8+ applies the setting without a restart.

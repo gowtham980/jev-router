@@ -42,7 +42,12 @@ const feature = defineFeaturePlugin({
     const hostDecisions=(agentId?:string)=>runtimeDecisions && decisionModelSelected(api.config,agentId) ? runtimeDecisions : undefined;
     const decisionPath=(agentId?:string)=>config.decisionSource==="direct" ? "direct"
       : hostDecisions(agentId) ? "host" : config.decisionSource==="host" ? "host_unavailable" : "direct";
-    const decide = createRouter(config,{credential:()=>credential(api.config,activeJevKey),optimization:()=>activeOptimization,hostDecisions});
+    // Read-only reuse of the Gateway's OpenRouter API-key auth; OAuth/token modes are not decision credentials.
+    const hostOpenRouterKey=async()=>{
+      const auth=await api.runtime.modelAuth?.resolveApiKeyForProvider?.({provider:"openrouter",cfg:api.config});
+      return auth?.mode==="api-key" ? auth.apiKey : undefined;
+    };
+    const decide = createRouter(config,{credential:()=>credential(api.config,activeJevKey,hostOpenRouterKey),optimization:()=>activeOptimization,hostDecisions});
     const firstAttempt = oncePerRun();
     const rows = new Map<string,RecordRow>();
     const continuity=new Continuity();
@@ -243,7 +248,7 @@ const feature = defineFeaturePlugin({
         const decisions=decisionPath(agentId);
         let credentialStatus="configured";
         if(decisions==="host_unavailable")credentialStatus="host_unavailable";
-        else if(decisions==="direct"){try { await credential(api.config,activeJevKey); } catch (error) { credentialStatus=(error as Error).message==="credential_missing" ? "missing" : "unreadable"; }}
+        else if(decisions==="direct"){try { await credential(api.config,activeJevKey,hostOpenRouterKey); } catch (error) { credentialStatus=(error as Error).message==="credential_missing" ? "missing" : "unreadable"; }}
         return { mode:config.mode,optimization:activeOptimization,continuity:activeContinuity,
         limitations:[
           "Thinking selection is advisory: this host has no per-turn thinking override hook.",
