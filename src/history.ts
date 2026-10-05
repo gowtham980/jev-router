@@ -6,7 +6,9 @@ import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
 export type RecordRow = {
   id:string; at:string; status:string; reason:string; latencyMs:number;
   selectedProfile?:string; selectedModel?:string; selectedThinking?:string; confidence?:number;
-  observedModel?:string; observedThinking?:string; tokens?:number;
+  observedModel?:string; observedThinking?:string; tokens?:number; failureCategory?:string;
+  inputTokens?:number; outputTokens?:number; feedback?:"good"|"stronger"|"cheaper";
+  completed?:boolean; promptTruncated?:boolean;
 };
 
 type StateEntry<T> = {key:string;value:T;createdAt:number};

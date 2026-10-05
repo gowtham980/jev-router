@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {fileHistoryStore,HistoryStore} from "../dist/history.js";
 import {filePreferenceStore} from "../dist/preferences.js";
-import {parseConfig,candidates,continuationDecision,createRouter,modelAllowed,redact} from "../dist/router.js";
+import {parseConfig,candidates,continuationDecision,createRouter,modelAllowed,redact,routingExcerpt} from "../dist/router.js";
 import plugin from "../dist/index.js";
 import {hostAuth} from "../dist/readiness.js";
 const profiles=[
@@ -100,7 +100,9 @@ function stateStore(name=randomUUID()){
 }
 function harness(mode="observe",historyName=randomUUID(),initialProfiles=[]){
  const hooks={},actions={},services=[];
- const hostConfig={agents:{defaults:{models:{"openai/gpt-6-astra":{},"ollama/kimi-k3:cloud":{}},modelPolicy:{allow:["openai/*","ollama/*"]}}}};
+ // Exact fixture models are catalogued without relying on host discovery/cache state.
+ // Wildcard routing policy remains covered by the allow-policy test and release audit.
+ const hostConfig={agents:{defaults:{models:{"openai/gpt-6-astra":{},"ollama/kimi-k3:cloud":{}},modelPolicy:{allow:["openai/gpt-6-astra","ollama/kimi-k3:cloud"]}}}};
  plugin.register({id:"jev-router",config:hostConfig,
   pluginConfig:{mode,profiles:initialProfiles,jevKey:"synthetic-test-only"},runtime:{state:{openKeyedStore:options=>stateStore(historyName+":"+options.namespace)}},registerService:s=>services.push(s),
   session:{controls:{registerSessionAction:a=>{actions[a.id]=a;}}},
@@ -113,11 +115,13 @@ test("plugin operations enforce scopes and report native-hook gaps",async()=>{
  assert.deepEqual(actions.snapshot.requiredScopes,["operator.read"]);
  assert.deepEqual(actions.preview.requiredScopes,["operator.write"]);
  assert.deepEqual(actions.save_preferences.requiredScopes,["operator.admin"]);
+ assert.deepEqual(actions.set_mode.requiredScopes,["operator.admin"]);
  assert.deepEqual(actions.configure_credential.requiredScopes,["operator.admin"]);
  await hooks.llm_input({runId:"native",provider:"openai",model:"gpt-6-astra"});
  const report=await actions.snapshot.handler({payload:{}});
  assert.equal(report.ok,true);assert.equal(report.result.records[0].status,"observed_only");
  assert.equal(report.result.gatewayModels.length,2);
+ assert.deepEqual(report.result.gatewayModels.map(model=>model.model).sort(),profiles.map(profile=>profile.model).sort());
  assert.ok(!JSON.stringify(report).includes('"prompt":'));
 });
 test("no candidates never changes model or thinking",async()=>{
@@ -157,6 +161,31 @@ test("routing preferences persist without mutating or reloading Gateway config",
  assert.deepEqual(snapshot.profiles,[]);
  assert.equal(snapshot.optimization,"quality");
  assert.equal(snapshot.continuity,false);
+});
+test("routing can be enabled, paused and restored through admin preferences",async t=>{
+ t.mock.method(hostAuth,"readStore",()=>({version:1,profiles:{"openai:test":{type:"api_key",provider:"openai",key:"synthetic"}}}));
+ const name=randomUUID();
+ const first=harness("observe",name,[profiles[1]]);
+ assert.equal((await first.actions.set_mode.handler({payload:{mode:"route"},agentId:"coder"})).result.mode,"route");
+ assert.equal((await first.actions.snapshot.handler({payload:{},agentId:"coder"})).result.mode,"route");
+ const restored=harness("observe",name,[profiles[1]]);
+ assert.equal((await restored.actions.snapshot.handler({payload:{},agentId:"coder"})).result.mode,"route");
+ assert.equal((await restored.actions.set_mode.handler({payload:{mode:"observe"},agentId:"coder"})).result.mode,"observe");
+ const empty=harness("observe",randomUUID());
+ const refused=await empty.actions.set_mode.handler({payload:{mode:"route"},agentId:"coder"});
+ assert.equal(refused.ok,false);
+ assert.equal((await empty.actions.snapshot.handler({payload:{},agentId:"coder"})).result.mode,"observe");
+});
+test("dashboard mode action changes actual hook behavior",async t=>{
+ t.mock.method(hostAuth,"readStore",()=>({version:1,profiles:{"openai:test":{type:"api_key",provider:"openai",key:"synthetic"}}}));
+ t.mock.method(globalThis,"fetch",async()=>response("complex"));
+ const {hooks,actions}=harness("observe",randomUUID(),[profiles[1]]);
+ assert.equal(await hooks.before_model_resolve({prompt:"Investigate a defect"},{runId:"before"}),undefined);
+ assert.equal((await actions.set_mode.handler({payload:{mode:"route"},agentId:"coder"})).ok,true);
+ const routed=await hooks.before_model_resolve({prompt:"Investigate a defect"},{runId:"enabled",agentId:"coder"});
+ assert.equal(routed.modelOverride,"gpt-6-astra");
+ assert.equal((await actions.set_mode.handler({payload:{mode:"observe"},agentId:"coder"})).ok,true);
+ assert.equal(await hooks.before_model_resolve({prompt:"Investigate a defect"},{runId:"paused"}),undefined);
 });
 test("local archive preferences persist atomically",async()=>{
  const path=join(tmpdir(),`jev-router-preferences-${randomUUID()}.json`);
@@ -214,4 +243,23 @@ test("concurrent preference and credential saves preserve both updates and host 
  const saved=await stateStore(name+":preferences").lookup("preferences");
  assert.equal(saved.optimization,"economy");assert.equal(saved.continuity,false);assert.equal(saved.jevKey.source,"store");
  assert.equal(JSON.stringify(first.hostConfig),before);
+});
+
+test("long routing prompts retain the task at both ends without leaking common secrets",()=>{
+ const prompt="Start: inspect the architecture. "+ "x".repeat(300) + " End: fix the payment race. api_key=secret-value";
+ const excerpt=routingExcerpt(prompt,100);
+ assert.equal(excerpt.truncated,true);
+ assert.ok(excerpt.text.length<=100);
+ assert.match(excerpt.text,/Start: inspect/);
+ assert.match(excerpt.text,/End: fix the payment race/);
+ assert.ok(!excerpt.text.includes("secret-value"));
+});
+
+test("host completion is recorded without claiming answer quality",async()=>{
+ const {hooks,actions}=harness("observe",randomUUID(),[profiles[0]]);
+ await hooks.before_model_resolve({prompt:"Task"},{runId:"outcome"});
+ await hooks.agent_end({runId:"outcome",success:true},{});
+ const row=(await actions.snapshot.handler({payload:{}})).result.records.find(row=>row.id==="outcome");
+ assert.equal(row.completed,true);
+ assert.equal(row.feedback,undefined);
 });

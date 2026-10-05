@@ -4,7 +4,8 @@ import { dirname, join } from "node:path";
 import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
 import type { Optimization, Profile } from "./router.js";
 
-export type Preferences = {profiles?:Profile[];optimization?:Optimization;continuity?:boolean;jevKey?:unknown};
+export type Preferences = {profiles?:Profile[];optimization?:Optimization;continuity?:boolean;mode?:"observe"|"route";jevKey?:unknown;
+  minConfidence?:number;pinnedModel?:string;pricing?:{billing?:"api"|"subscription";baselineModel?:string;rates:Record<string,{input:number;output:number}>}};
 export type PreferenceStore = {
   load():Promise<Preferences|undefined>;
   save(value:Preferences):Promise<void>;

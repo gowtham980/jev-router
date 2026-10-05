@@ -1,6 +1,6 @@
 {
   "name": "openclaw-plugin-jev-router",
-  "version": "0.4.4",
+  "version": "0.4.6",
   "description": "Provider-neutral, quality-aware model routing for OpenClaw with cost-conscious profiles and native Control UI.",
   "homepage": "https://github.com/gowtham980/jev-router#readme",
   "repository": {
@@ -22,7 +22,7 @@
     "build": "tsc -p tsconfig.json && openclaw plugins build",
     "validate": "openclaw plugins validate --json",
     "test": "tsc -p tsconfig.json && node --test test/*.test.mjs && node scripts/release-audit.mjs",
-    "pack": "openclaw plugins pack --json"
+    "pack": "node scripts/pack-release.mjs"
   },
   "files": [
     "dist",
@@ -35,16 +35,17 @@
     "config.example.json",
     "PRIVACY.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "doctor-contract-api.js"
   ],
   "peerDependencies": {
-    "openclaw": "2026.9.5"
+    "openclaw": "2026.9.8"
   },
   "dependencies": {
     "typebox": "1.3.17"
   },
   "devDependencies": {
-    "openclaw": "2026.9.5",
+    "openclaw": "2026.9.8",
     "esbuild": "0.28.2",
     "typescript": "5.9.3",
     "@types/node": "25.0.3"
@@ -55,10 +56,10 @@
     ],
     "controlUi": "./src/control-ui.ts",
     "compat": {
-      "pluginApi": "2026.9.5"
+      "pluginApi": "2026.9.8"
     },
     "build": {
-      "openclawVersion": "2026.9.5"
+      "openclawVersion": "2026.9.8"
     }
   },
   "license": "MIT"

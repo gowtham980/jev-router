@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.6 — Local analytics and guardrails
+
+- Added per-model observed usage, explicit outcome feedback, and a bounded weekly review.
+- Added optional API price/baseline estimates with subscription mode and split-token coverage labels.
+- Added configurable classifier confidence and a Gateway-wide pinned-model guardrail.
+- Preserved existing routing preferences and redacted local history.
+- Added a three-choice starter setup for new model pools, with direct routing activation and the existing custom editor under Advanced.
+- Clarified suggested-use and model-match wording, aligned 0.4.6 setup documentation, and added a reproducible release pack step that includes the Doctor contract.
+
+## 0.4.5
+
+- Target the tested OpenClaw 2026.9.7 SDK.
+- Add a guided dashboard setup sequence and an administrator-only, persisted routing mode control with credential and eligible-model checks.
+- Preserve custom routing descriptions when changing a model purpose; clarify starter cost/quality estimates and distinguish preview from observed model use.
+- Make the synthetic catalog fixture independent of host discovery/cache state while preserving wildcard routing and allowlist coverage.
+
 ## 0.4.4
 
 - Document and package the required Custom plugin UI activation step for new Gateways.

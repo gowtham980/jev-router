@@ -1,6 +1,6 @@
 # Jev Router
 
-OpenClaw **2026.9.5** feature plugin. Uses your existing TypeSafe/Jev (or OpenRouter)
+OpenClaw **2026.9.8** feature plugin. Uses your existing TypeSafe/Jev (or OpenRouter)
 credential to choose from an explicit, provider-neutral set of model profiles
 with advisory thinking recommendations. Includes a native Control UI page and an
 optional preview tool.
@@ -38,7 +38,7 @@ thinking requires a host-owned, per-run override API. We intentionally do not
 patch installed OpenClaw files, spoof directives, mutate sessions from hooks,
 replace provider credentials, or bypass native session locks.
 
-The hook receives a prompt and attachment metadata, not full conversation history.
+The hook receives the current prompt and attachment metadata, not full conversation history. Long prompts are redacted, then excerpted from the beginning and end within the configured limit; the middle is omitted.
 For contextual follow-ups, selection has less information than the answering agent.
 
 ## Use cases
@@ -69,25 +69,34 @@ selection, conservative task continuity, readiness filtering and an auditable
 decision history. It complements OpenClaw's host-owned fallback chain; it does not
 replace provider authentication, retries or execution policy.
 
+## Quick start
+
+1. Install the v0.4.6 GitHub release archive. ClawHub installation is available only after a matching version is listed there.
+2. Allow its conversation hooks and enable Custom plugin UI with the commands below, then restart the Gateway.
+3. Open **Jev Router** in Control UI. Connect a Jev key, then choose models for **Simple tasks**, **Everyday work**, and **Difficult work** on the Models page. You can leave unused choices blank. Save the starter setup and preview a representative task.
+4. Select **Enable automatic selection** beside the starter setup (or **Enable routing** on Overview). This switches the Gateway-wide routing mode; agent model policies still apply. Send a real message and check **Logs** for the model actually used. **Pause routing** returns to observation mode.
+
+The dashboard requires administrator access for setup changes. Thinking recommendations do not change the host's thinking level. The dashboard mode control saves a plugin preference; once used, it takes precedence over the startup `mode` setting until changed again in the dashboard.
+
 ## Build and test
 
-Node 22+ (tested Node 25), npm, OpenClaw 2026.9.5.
+Node >=24.16.0 <25 or >=26.1.0 (tested Node 24.20.0), npm, OpenClaw 2026.9.8.
 
 ```sh
 npm install --ignore-scripts
 npm test
 npm run build
 npm run validate
-openclaw plugins pack --root . --out ./jev-router.tgz --json
+npm run pack -- ./jev-router-0.4.6-release.tgz
 ```
 
-OpenClaw is pinned to the tested registry version, 2026.9.5. Use npm ci for
+OpenClaw is pinned to the tested registry version, 2026.9.8. Use npm ci for
 a clean dependency installation from the portable lockfile.
 Runtime needs no new OpenAI API key.
 
 ## Installation and configuration
 
-Install from ClawHub (recommended):
+After v0.4.6 is listed on ClawHub, install it with:
 
 ```sh
 openclaw plugins install clawhub:openclaw-plugin-jev-router --accept-capabilities
@@ -96,9 +105,11 @@ openclaw plugins install clawhub:openclaw-plugin-jev-router --accept-capabilitie
 Or install the exact GitHub release artifact:
 
 ```sh
-curl -LO https://github.com/gowtham980/jev-router/releases/download/v0.4.4/jev-router-0.4.4-release.tgz
-openclaw plugins install ./jev-router-0.4.4-release.tgz --accept-capabilities
+curl -LO https://github.com/gowtham980/jev-router/releases/download/v0.4.6/jev-router-0.4.6-release.tgz
+openclaw plugins install ./jev-router-0.4.6-release.tgz --accept-capabilities --force
 ```
+
+OpenClaw treats a downloaded local archive as an unreviewed source and requires `--force`. Verify the archive SHA-256 against the GitHub release notes before installing. This flag accepts the reviewed archive; it does not relax model or conversation-hook policy.
 
 Then grant the explicit conversation-hook permission, enable native UI for
 user-installed plugins, and restart the Gateway:
@@ -112,8 +123,9 @@ openclaw gateway restart
 ```
 
 Open **Jev Router** in Control UI to connect Jev and choose models discovered
-from the selected agent's Gateway. Start in observe mode; route mode returns
-per-run provider/model overrides.
+from the selected agent's Gateway. Start in observe mode, then use the dashboard
+to enable routing after previewing a task. Route mode returns per-run
+provider/model overrides.
 
 Custom plugin UI is deliberately disabled by default on each Gateway. The
 backend can be loaded while its page remains hidden until the setting above is
@@ -122,6 +134,8 @@ loopback URL such as `http://127.0.0.1:18789/`; authenticated native plugin UI
 does not load over plain HTTP on a LAN address.
 
 Conversation access is an explicit permission: it lets the plugin receive prompt-bearing hooks. The router forwards only its bounded, redacted prompt excerpt to Jev. Without this permission, previews can work while automatic routing hooks are blocked. Verify with `openclaw plugins inspect jev-router --runtime --json`: `before_model_resolve` must appear and diagnostics must not report blocked hooks.
+
+The three-choice starter setup creates normal routing profiles with neutral cost and quality estimates; it never guesses provider prices or model quality. Existing custom pools remain in the Advanced editor and are not replaced by the starter form. The Suggested use control generates a starting description and recommended thinking level; it does not itself set a routing tier or change the host thinking level. Edit When Jev should use it to define the actual task boundary. Set relative cost and expected quality based on your own evaluation, then preview representative tasks.
 
 The dashboard discovers the models shown by any compatible Gateway's normal model picker,
 but the routing pool remains
@@ -167,6 +181,8 @@ egress restricted to Jev endpoints. Isolated plugin state contains only a
 SecretRef. The key is never returned to the page after saving. Dashboard
 preference changes do not rewrite Gateway configuration or reload providers.
 
+The Overview now summarizes up to 200 recent Gateway-wide local records with period controls, distinct model-match/kept-current/failed counts, median routing delay, and selections per configured profile. Logs filter by result and model and offer run details. Known model-call failure categories are reduced to safe labels; unknown causes remain unknown. These are routing signals, not measured answer quality, monetary cost, or long-term trends.
+
 Statuses distinguish preview/recommendation, override requested, observed model
 match/mismatch, failure, and missing hook observation. Thinking is always labeled
 recommended versus observed. An observed match is not proof the override caused
@@ -208,9 +224,11 @@ openclaw plugins disable jev-router
 Then follow the CLI's reload instructions. No model defaults need restoration.
 Remove the plugin using the normal OpenClaw uninstaller if desired.
 
-## 0.4.3 release status
+## 0.4.6 release status
 
-The supported runtime is OpenClaw 2026.9.5. Release checks cover exact-profile
+This is an unpublished release candidate. A local archive install may show a provenance-invalid trust label because it has no ClawHub provenance; the plugin can still load. Do not present that label as a verified publisher identity. Publish the tested artifact and its SHA-256 together, and repeat the install check against the distributed file.
+
+The supported runtime is OpenClaw 2026.9.8. Release checks cover exact-profile
 continuity, overlapping runs, lifecycle invalidation, conservative escalation,
 deadline handling, persistence, dashboard preservation and host-policy enforcement.
 Run `npm test`, `npm run build`, `npm run validate` and
@@ -224,11 +242,10 @@ benchmark answer quality, track subscription allowance, switch mid-run, or enfor
 recommended thinking levels. Compatibility with other OpenClaw versions is not
 claimed until verified.
 
-OpenClaw artifact packing omits repository documentation. The GitHub release page
-publishes the validated installable artifact alongside LICENSE, README.md,
+The release pack script adds the declared Doctor contract omitted by the base OpenClaw packer, then validates the extracted package. OpenClaw artifact packing omits repository documentation. The GitHub release page should publish the validated installable artifact alongside LICENSE, README.md,
 PRIVACY.md, CHANGELOG.md and config.example.json in the source repository.
 
-Known host limitation: OpenClaw 2026.9.5 native Codex conversations can
+Previously observed host limitation (OpenClaw 2026.9.5; not reverified on 2026.9.8): native Codex conversations can
 occasionally reject a model change while waiting for Codex to confirm unloading
 the previous thread configuration. The host stops before inference and preserves
 the conversation. This is an OpenClaw/Codex handoff limitation rather than a Jev
@@ -240,8 +257,16 @@ Router state mutation; reconnect and retry the turn.
 
 ## Live model-only verification
 
-See [MODEL_ROUTING_TEST.md](MODEL_ROUTING_TEST.md) for successful automatic model switches, required hook permission and reproduction commands.
+After an eligible unlocked turn, inspect Jev Router Logs. Require the selected and observed model to match on the same run ID; a preview alone does not prove routing.
 
 ## Fallback verification
 
-See [FALLBACK_VERIFICATION.md](FALLBACK_VERIFICATION.md) for v0.1.2 changes, controlled fault-injection evidence, live OAuth checks, and limitations. Model fallbacks cannot recover an account-wide OpenAI auth/quota outage or a native runtime handoff failure.
+Model fallbacks remain host-owned. They cannot recover an account-wide OpenAI auth/quota outage or a native runtime handoff failure. A fallback run is not counted as a Jev model match unless telemetry verifies the actually used model.
+
+## Analytics and guardrails
+
+The **Analytics** tab reports observed model utilization and host-reported run completions for the last seven days (up to 200 locally retained records). Completion means the host finished a run, not that the answer was good. Logs include a per-run explanation and optional **Good result / Needed stronger / Could be cheaper** feedback. Feedback is local, editable, and does not automatically retrain routing. The weekly review highlights the model with the most quality or cost concerns; a model match alone is never treated as answer quality.
+
+The same tab lets an administrator set the minimum classifier confidence and optionally pin one pool model Gateway-wide. If the pinned model is ineligible for an agent or attachment, Jev keeps the current model instead of choosing another. Clear the pin to resume automatic choices.
+
+For API billing, enter USD prices per million input and output tokens for each model and select a baseline model. Estimated savings use the **same observed token counts** for the baseline and actual observed model; only runs with both token counts and both prices are compared. This is a hypothetical estimate, not billed spend or a prediction of baseline token usage. Subscription mode shows utilization and feedback without a savings claim. Older records without split usage remain visible but are excluded from cost estimates. No prompts or credentials are stored in analytics history.
