@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.7 — OpenClaw compatibility
+
+- Declare a bounded plugin-API and peer range for OpenClaw 2026.9.8 through the 2026.10 line, after testing the 2026.10.5 SDK and packaged install.
+- Keep the build SDK pinned to 2026.10.5; future monthly API lines need new verification before extending the range.
+
 ## 0.4.6 — Local analytics and guardrails
 
 - Added per-model observed usage, explicit outcome feedback, and a bounded weekly review.

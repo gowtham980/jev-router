@@ -1,6 +1,6 @@
 # Jev Router
 
-OpenClaw **2026.9.8** feature plugin. Uses your existing TypeSafe/Jev (or OpenRouter)
+OpenClaw feature plugin tested through **2026.10.5**. Uses your existing TypeSafe/Jev (or OpenRouter)
 credential to choose from an explicit, provider-neutral set of model profiles
 with advisory thinking recommendations. Includes a native Control UI page and an
 optional preview tool.
@@ -80,17 +80,17 @@ The dashboard requires administrator access for setup changes. Thinking recommen
 
 ## Build and test
 
-Node >=24.16.0 <25 or >=26.1.0 (tested Node 24.20.0), npm, OpenClaw 2026.9.8.
+Node >=24.16.0 <25 or >=26.1.0, npm, OpenClaw 2026.10.5 for this build.
 
 ```sh
 npm install --ignore-scripts
 npm test
 npm run build
 npm run validate
-npm run pack -- ./jev-router-0.4.6-release.tgz
+npm run pack -- ./jev-router-0.4.7-release.tgz
 ```
 
-OpenClaw is pinned to the tested registry version, 2026.9.8. Use npm ci for
+The build dependency is pinned to the tested SDK, 2026.10.5. Use npm ci for
 a clean dependency installation from the portable lockfile.
 Runtime needs no new OpenAI API key.
 
@@ -226,9 +226,11 @@ Remove the plugin using the normal OpenClaw uninstaller if desired.
 
 ## 0.4.6 release status
 
-This is an unpublished release candidate. A local archive install may show a provenance-invalid trust label because it has no ClawHub provenance; the plugin can still load. Do not present that label as a verified publisher identity. Publish the tested artifact and its SHA-256 together, and repeat the install check against the distributed file.
+A local archive install may show a provenance-invalid trust label because it has no ClawHub provenance; the plugin can still load. Do not present that label as a verified publisher identity. Publish the tested artifact and its SHA-256 together, and repeat the install check against the distributed file.
 
-The supported runtime is OpenClaw 2026.9.8. Release checks cover exact-profile
+The declared plugin-API range is `>=2026.9.8 <2026.11.0`; this build was tested
+on OpenClaw 2026.10.5. Future monthly APIs require retesting before the range
+is extended. Release checks cover exact-profile
 continuity, overlapping runs, lifecycle invalidation, conservative escalation,
 deadline handling, persistence, dashboard preservation and host-policy enforcement.
 Run `npm test`, `npm run build`, `npm run validate` and
@@ -239,8 +241,8 @@ disabled (`private: true`); install the validated OpenClaw release artifact inst
 Start new deployments in observe mode, configure a small evaluated model pool,
 and compare representative tasks before enabling routing. The plugin does not
 benchmark answer quality, track subscription allowance, switch mid-run, or enforce
-recommended thinking levels. Compatibility with other OpenClaw versions is not
-claimed until verified.
+recommended thinking levels. A compatible declaration is not a guarantee that
+every future host release will work.
 
 The release pack script adds the declared Doctor contract omitted by the base OpenClaw packer, then validates the extracted package. OpenClaw artifact packing omits repository documentation. The GitHub release page should publish the validated installable artifact alongside LICENSE, README.md,
 PRIVACY.md, CHANGELOG.md and config.example.json in the source repository.
