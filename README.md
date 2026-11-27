@@ -1,6 +1,6 @@
 # Jev Router
 
-OpenClaw feature plugin tested through **2026.10.5**. Uses your existing TypeSafe/Jev (or OpenRouter)
+OpenClaw feature plugin tested through **2026.11.7**. Uses your existing TypeSafe/Jev (or OpenRouter)
 credential to choose from an explicit, provider-neutral set of model profiles
 with advisory thinking recommendations. Includes a native Control UI page and an
 optional preview tool.
@@ -80,17 +80,17 @@ The dashboard requires administrator access for setup changes. Thinking recommen
 
 ## Build and test
 
-Node >=24.16.0 <25 or >=26.1.0, npm, OpenClaw 2026.10.5 for this build.
+Node >=24.16.0 <25 or >=26.1.0, npm, OpenClaw 2026.11.7 for this build.
 
 ```sh
 npm install --ignore-scripts
 npm test
 npm run build
 npm run validate
-npm run pack -- ./jev-router-0.4.7-release.tgz
+npm run pack -- ./jev-router-0.4.8-release.tgz
 ```
 
-The build dependency is pinned to the tested SDK, 2026.10.5. Use npm ci for
+The build dependency is pinned to the tested SDK, 2026.11.7. Use npm ci for
 a clean dependency installation from the portable lockfile.
 Runtime needs no new OpenAI API key.
 
@@ -228,9 +228,15 @@ Remove the plugin using the normal OpenClaw uninstaller if desired.
 
 A local archive install may show a provenance-invalid trust label because it has no ClawHub provenance; the plugin can still load. Do not present that label as a verified publisher identity. Publish the tested artifact and its SHA-256 together, and repeat the install check against the distributed file.
 
-The declared plugin-API range is `>=2026.9.8 <2026.11.0`; this build was tested
-on OpenClaw 2026.10.5. Future monthly APIs require retesting before the range
-is extended. Release checks cover exact-profile
+The declared plugin-API range is `>=2026.9.8 <2026.12.0`; this source was verified
+on OpenClaw 2026.10.5 and 2026.11.7 (verified 2026-11-24).
+The build SDK is pinned to 2026.11.7. Other stable patches were not separately
+tested; prereleases are not admitted by this range or claimed as supported. Future
+monthly APIs require retesting before the range is extended.
+Auth readiness prefers the asynchronous loader on newer hosts; a read-only
+synchronous fallback remains necessary for older supported SDKs such as
+2026.10.5, which do not export the async loader. An async failure never retries
+through the deprecated sync path. See [local compatibility evidence](docs/openclaw-compatibility.md). Release checks cover exact-profile
 continuity, overlapping runs, lifecycle invalidation, conservative escalation,
 deadline handling, persistence, dashboard preservation and host-policy enforcement.
 Run `npm test`, `npm run build`, `npm run validate` and

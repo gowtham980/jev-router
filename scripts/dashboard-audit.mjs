@@ -16,6 +16,7 @@ const previews=[];
 const saves=[];
 const modes=[];const analyticsSaves=[];const ratings=[];
 let currentMode="observe";
+const exclusions={agents:[],sessions:[]};
 const testProfiles=[
  {id:"routine",model:"openai/gpt-5.6-sol",description:"Routine work",thinking:"low",cost:"medium",quality:"strong",input:["text"],ready:true,reason:"Eligible for text prompts"},
  {id:"deep",model:"openai/gpt-5.6-sol",description:"Deep work",thinking:"high",cost:"medium",quality:"strong",input:["text"],ready:true,reason:"Eligible for text prompts"},
@@ -33,7 +34,7 @@ const host={pluginId:"jev-router",signal:new AbortController().signal,connection
   if(params.actionId==="save_analytics"){analyticsSaves.push(params);return {ok:true,result:{saved:true}};}
   if(params.actionId==="rate_run"){ratings.push(params);return {ok:true,result:{saved:true}};}
   if(params.actionId==="set_mode"){modes.push(params);currentMode=params.payload.mode;return {ok:true,result:{mode:currentMode}};}
-  return {ok:true,result:{mode:currentMode,optimization:"balanced",continuity:true,minConfidence:0.65,pricing:{billing:"subscription",rates:{}},profiles:configuredProfiles,gatewayModels:[{model:"openai/gpt-5.6-sol",provider:"openai",name:"Sol",input:["text"],ready:true,configured:true},{model:"custom/economy",provider:"custom",name:"Economy",input:["text"],ready:true,configured:true}],records:[{id:"failed-run",at:"2026-10-02T12:00:00.000Z",status:"run_failed",reason:"jev_choice",latencyMs:420,selectedProfile:"routine",selectedModel:"openai/gpt-5.6-sol",observedModel:"openai/gpt-5.6-sol",failureCategory:"authentication"},{id:"uncertain-run",at:"2026-10-02T12:01:00.000Z",status:"kept_current",reason:"low_confidence",latencyMs:390,confidence:0.4}],limitations:[],health:{agentId:params.agentId,credential:"configured",readyProfiles:2,totalProfiles:3,gatewayModels:2,fallbacks:[],history:"persistent-local"}}};
+  return {ok:true,result:{exclusions,mode:currentMode,optimization:"balanced",continuity:true,minConfidence:0.65,pricing:{billing:"subscription",rates:{}},profiles:configuredProfiles,gatewayModels:[{model:"openai/gpt-5.6-sol",provider:"openai",name:"Sol",input:["text"],ready:true,configured:true},{model:"custom/economy",provider:"custom",name:"Economy",input:["text"],ready:true,configured:true}],records:[{id:"failed-run",at:"2026-10-02T12:00:00.000Z",status:"run_failed",reason:"jev_choice",latencyMs:420,selectedProfile:"routine",selectedModel:"openai/gpt-5.6-sol",observedModel:"openai/gpt-5.6-sol",failureCategory:"authentication"},{id:"uncertain-run",at:"2026-10-02T12:01:00.000Z",status:"kept_current",reason:"low_confidence",latencyMs:390,confidence:0.4}],limitations:[],health:{agentId:params.agentId,credential:"configured",readyProfiles:2,totalProfiles:3,gatewayModels:2,fallbacks:[],history:"persistent-local"}}};
  }};
 await plugin.activate(host);
 const view=page.mount(element("container"),{host,signal:host.signal});
@@ -56,11 +57,11 @@ overviewTab.onclick();
 const setup=elements.find(x=>x.tag==="details"&&x.className?.includes("setup-panel"));
 assert.equal(setup.open,false,"connected credential setup should stay collapsed");
 assert.ok(elements.some(x=>x.textContent==="Jev is observing, not switching models"));
-const routeButton=elements.find(x=>x.tag==="button"&&x.textContent==="Enable routing");
+const routeButton=elements.find(x=>x.tag==="button"&&x.textContent==="Enable routing globally");
 assert.ok(routeButton);assert.equal(routeButton.disabled,false);
 await routeButton.onclick();
 assert.equal(modes[0].payload.mode,"route");
-assert.equal(routeButton.textContent,"Pause routing");
+assert.equal(routeButton.textContent,"Pause routing globally");
 assert.ok(elements.some(x=>x.textContent?.includes("Send a real message and check Logs")));
 const search=elements.find(x=>x.tag==="input"&&x.type==="search");
 const filter=elements.find(x=>x.tag==="select"&&x.children.some?.(x=>x.textContent==="Selected only"));

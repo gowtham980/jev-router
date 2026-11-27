@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.8 — OpenClaw November compatibility and selective routing
+
+- Declare a bounded plugin-API and peer range for OpenClaw 2026.9.8 through the 2026.11 stable line (`<2026.12.0`), with local source verification on 2026.10.5 and 2026.11.7.
+- Pin the build SDK and lockfile to tested stable 2026.11.7; future monthly API lines and betas need separate verification.
+- Prefer the public async auth-store loader when available while retaining the read-only sync fallback for supported older hosts.
+- Refresh dashboard audit fixtures for selective-routing exclusions and explicit global-mode labels.
+- Add persistent per-agent and exact-session automatic-routing exclusions, preserving global mode and other preferences. See docs/selective-routing.md.
+- Keep the Doctor contract in final archives and omit macOS AppleDouble metadata.
+
 ## 0.4.7 — OpenClaw compatibility
 
 - Declare a bounded plugin-API and peer range for OpenClaw 2026.9.8 through the 2026.10 line, after testing the 2026.10.5 SDK and packaged install.

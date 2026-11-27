@@ -23,6 +23,7 @@ export const contract = defineFeatureContract({
       kind: "query", description: "Read redacted routing decisions and runtime support.",
       input: Type.Object({agentId:Type.Optional(text)}, {additionalProperties:false}),
       output: Type.Object({
+        exclusions:Type.Object({agents:Type.Array(text,{maxItems:1000}),sessions:Type.Array(Type.String({maxLength:512}),{maxItems:1000})}),
         mode: text, optimization: text, continuity:Type.Boolean(), minConfidence:Type.Number(), pinnedModel:Type.Optional(text),
         pricing:Type.Object({billing:Type.Optional(Type.Union([Type.Literal("api"),Type.Literal("subscription")])),baselineModel:Type.Optional(text),rates:Type.Record(Type.String(),Type.Object({input:Type.Number(),output:Type.Number()}))}),
         limitations: Type.Array(text), records: Type.Array(recordSchema,{maxItems:200}),

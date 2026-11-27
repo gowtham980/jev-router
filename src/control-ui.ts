@@ -149,6 +149,42 @@ export default defineControlUiPlugin({
           finally{routeButton.disabled=!context.host.connection.canAdmin||preferencesDirty;}
         };
 
+        const exclusionsPanel=document.createElement("section");exclusionsPanel.className="panel";
+        const exclusionsTitle=document.createElement("h2");exclusionsTitle.textContent="Automatic routing exclusions";
+        const exclusionsHelp=document.createElement("p");exclusionsHelp.textContent="Excluded agents or sessions keep OpenClaw’s selected/default model. Jev skips automatic classification and model overrides, including its global pin. Host fallbacks still apply. Changes affect future routing decisions, not a response already running.";
+        const agentExclusion=document.createElement("button");
+        const sessionExclusion=document.createElement("button");
+        const exclusionTarget=document.createElement("p");
+        const exclusionOutput=document.createElement("output");exclusionOutput.setAttribute("aria-live","polite");
+        const exclusionList=document.createElement("ul");
+        exclusionsPanel.append(exclusionsTitle,exclusionsHelp,exclusionTarget,agentExclusion,sessionExclusion,exclusionOutput,exclusionList);
+        let exclusionBusy=false;
+        const setExclusion=async(scope:"agent"|"session",target:string,disabled:boolean)=>{
+          if(exclusionBusy)return;exclusionBusy=true;agentExclusion.disabled=true;sessionExclusion.disabled=true;
+          exclusionList.querySelectorAll("button").forEach(button=>button.disabled=true);
+          exclusionOutput.textContent="Saving…";
+          try{await invokeAdmin("set_routing_exclusion",{scope,target,disabled});exclusionOutput.textContent=disabled?"Automatic routing disabled for "+target:"Exclusion removed for "+target+". Global mode and other exclusions still apply.";}
+          catch(error){exclusionOutput.textContent=error instanceof Error?error.message:"Could not save exclusion.";}
+          finally{exclusionBusy=false;await load();}
+        };
+        const renderExclusions=(snapshot:Awaited<ReturnType<typeof client.invoke<"snapshot">>>)=>{
+          const agent=selectedAgent(),session=context.host.sessions.selectedKey??undefined;
+          const agentDisabled=!!agent&&snapshot.exclusions.agents.includes(agent);
+          const sessionDisabled=!!session&&snapshot.exclusions.sessions.includes(session);
+          exclusionTarget.textContent="Agent: "+(agent??"none selected")+" · Session: "+(session??"none selected — select a chat first");
+          agentExclusion.textContent=agentDisabled?"Allow routing for selected agent":"Disable routing for selected agent";
+          sessionExclusion.textContent=sessionDisabled?"Allow routing for selected session":"Disable routing for selected session";
+          agentExclusion.disabled=exclusionBusy||!context.host.connection.canAdmin||!agent;
+          sessionExclusion.disabled=exclusionBusy||!context.host.connection.canAdmin||!session;
+          agentExclusion.onclick=()=>{if(agent)void setExclusion("agent",agent,!agentDisabled);};
+          sessionExclusion.onclick=()=>{if(session)void setExclusion("session",session,!sessionDisabled);};
+          exclusionList.replaceChildren();
+          for(const [scope,targets] of [["agent",snapshot.exclusions.agents],["session",snapshot.exclusions.sessions]] as const){
+            for(const target of targets){const item=document.createElement("li");const label=document.createElement("span");label.textContent=scope+": "+target+" ";const remove=document.createElement("button");remove.textContent="Remove exclusion";remove.setAttribute("aria-label","Remove "+scope+" exclusion for "+target);remove.disabled=exclusionBusy||!context.host.connection.canAdmin;remove.onclick=()=>void setExclusion(scope,target,false);item.append(label,remove);exclusionList.append(item);}
+          }
+          if(!exclusionList.childElementCount){const item=document.createElement("li");item.textContent="No exclusions. Global routing mode applies everywhere.";exclusionList.append(item);}
+        };
+
         const profileSection=document.createElement("section"); profileSection.className="panel";
         const profileTitle=document.createElement("h2"); profileTitle.textContent="Models Jev can choose from";
         const profileHelp=document.createElement("p");profileHelp.className="pool-help";profileHelp.textContent="Jev chooses only from these configured profiles. Eligibility is shown for text prompts and the selected agent.";
@@ -480,7 +516,7 @@ export default defineControlUiPlugin({
           const stronger=[...weekly.models].filter(([,item])=>item.stronger>0).sort((a,b)=>b[1].stronger-a[1].stronger)[0];
           const cheap=[...weekly.models].filter(([,item])=>item.cheaper>0).sort((a,b)=>b[1].cheaper-a[1].cheaper)[0];
           weeklyReview.textContent=stronger?stronger[0]+" has "+stronger[1].stronger+" “needed stronger” rating"+(stronger[1].stronger===1?"":"s")+" this week. Review its profile or guardrail.":cheap?cheap[0]+" has "+cheap[1].cheaper+" “could be cheaper” rating"+(cheap[1].cheaper===1?"":"s")+" this week. Consider a lower-cost route.":reviewed?"No quality or cost concerns marked this week. Continue rating runs to spot patterns.":"No rated outcomes yet. Rate runs in Logs to start a weekly review.";
-          latestSnapshot=snapshot;
+          latestSnapshot=snapshot; renderExclusions(snapshot);
           status.textContent=`Live · ${snapshot.health.agentId??"default agent"}`;
           dashboardTabs[2].count.textContent=String(snapshot.health.gatewayModels);dashboardTabs[3].count.textContent=String(snapshot.records.length);
           const credentialReady=snapshot.health.credential==="configured";
@@ -492,7 +528,7 @@ export default defineControlUiPlugin({
           routingStep.textContent=snapshot.mode==="route"?"✓ Routing enabled":"Preview a task, then enable routing";
           verifyStep.textContent=snapshot.records.some(row=>row.status==="model_verified")?"✓ A selected model matched the model used":"Send a real message and check Logs for the model actually used";
           routeButton.dataset.mode=snapshot.mode;
-          routeButton.textContent=snapshot.mode==="route"?"Pause routing":"Enable routing";
+          routeButton.textContent=snapshot.mode==="route"?"Pause routing globally":"Enable routing globally";
           routeButton.disabled=!context.host.connection.canAdmin||preferencesDirty||(snapshot.mode!=="route"&&!routingReady);
           modelsLink.hidden=snapshot.health.readyProfiles>0;
           logsLink.hidden=snapshot.mode!=="route";
@@ -500,7 +536,7 @@ export default defineControlUiPlugin({
           else if(snapshot.health.gatewayModels===0){healthTitle.textContent="No Gateway models discovered";healthNote.textContent="Check provider configuration. Jev will keep the current model until the catalog is available.";}
           else if(snapshot.health.readyProfiles===0){healthTitle.textContent="Routing pool needs attention";healthNote.textContent="Select at least one available model for this agent.";}
           else if(snapshot.mode!=="route"){healthTitle.textContent="Jev is observing, not switching models";healthNote.textContent="Decisions are recorded, but OpenClaw keeps the current model.";}
-          else{healthTitle.textContent="Routing is ready";healthNote.textContent=`Jev can choose between ${snapshot.health.readyProfiles} eligible ${snapshot.health.readyProfiles===1?"profile":"profiles"} for this agent.`;}
+          else if(snapshot.exclusions.agents.includes(selectedAgent()??"")||snapshot.exclusions.sessions.includes(context.host.sessions.selectedKey??"")){healthTitle.textContent="Automatic routing disabled for this selection";healthNote.textContent="An agent or session exclusion applies. OpenClaw keeps its selected/default model; host fallbacks still apply.";} else{healthTitle.textContent="Routing is ready";healthNote.textContent=`Jev can choose between ${snapshot.health.readyProfiles} eligible ${snapshot.health.readyProfiles===1?"profile":"profiles"} for this agent.`;}
           setupState.textContent=credentialReady?"Connected":"Action required";setupSection.open=!credentialReady;setupSection.classList.toggle("attention",!credentialReady);
           setCard(routingCard,snapshot.mode==="route"?"On":"Observe only",`${snapshot.optimization[0].toUpperCase()+snapshot.optimization.slice(1)} optimization`,snapshot.mode==="route");
           setCard(jevCard,snapshot.health.credential==="configured"?"Connected":"Needs attention",snapshot.health.credential==="configured"?"Credential found":snapshot.health.credential,snapshot.health.credential==="configured");
@@ -523,8 +559,8 @@ export default defineControlUiPlugin({
         };
         const load=async()=>{
           if(loading||context.signal.aborted)return;loading=true;
-          const agent=selectedAgent();
-          try{const snapshot=await client.invoke("snapshot",agentPayload(),options());if(!context.signal.aborted&&agent===selectedAgent())render(snapshot);}
+          const agent=selectedAgent(),session=context.host.sessions.selectedKey;
+          try{const snapshot=await client.invoke("snapshot",agentPayload(),options());if(!context.signal.aborted&&agent===selectedAgent()&&session===context.host.sessions.selectedKey)render(snapshot);}
           catch{status.textContent="Disconnected · retrying automatically";}
           finally{loading=false;}
         };
@@ -540,7 +576,7 @@ export default defineControlUiPlugin({
         void load();
         const timer=globalThis.setInterval(()=>void load(),5000);
         const workspace=document.createElement("div");workspace.className="workspace-grid";workspace.append(profileSection,preview);
-        overviewPanel.append(healthBanner,insights,guide,cards,setupSection,workspace,details);analyticsPanel.append(analytics,analyticsSettings);advancedModels.append(catalogSection);modelsPanel.append(starterSection,advancedModels);logsPanel.append(historySection);
+        overviewPanel.append(healthBanner,exclusionsPanel,insights,guide,cards,setupSection,workspace,details);analyticsPanel.append(analytics,analyticsSettings);advancedModels.append(catalogSection);modelsPanel.append(starterSection,advancedModels);logsPanel.append(historySection);
         section.append(tabs,overviewPanel,analyticsPanel,modelsPanel,logsPanel);container.append(section);
         return {dispose(){stop();globalThis.clearInterval(timer);section.remove();}};
       },

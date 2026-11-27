@@ -2,7 +2,7 @@
   "id": "jev-router",
   "name": "Jev Router",
   "description": "Provider-neutral Jev routing with honest runtime telemetry.",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "configContracts": {
     "secretInputs": {
       "paths": [
@@ -175,9 +175,9 @@
     "onStartup": true
   },
   "controlUi": {
-    "entry": "dist/control-ui/4a66eca6720be21c3c6ef49341dbe48005824b70734f9df0dc8b4509d6cb77d3/index.js",
+    "entry": "dist/control-ui/73a308e4261b4a02fbeb774e7b71a73423343af3a8a4f8558c106bb7912638ff/index.js",
     "styles": [
-      "dist/control-ui/4a66eca6720be21c3c6ef49341dbe48005824b70734f9df0dc8b4509d6cb77d3/index.css"
+      "dist/control-ui/73a308e4261b4a02fbeb774e7b71a73423343af3a8a4f8558c106bb7912638ff/index.css"
     ]
   },
   "doctorContract": {

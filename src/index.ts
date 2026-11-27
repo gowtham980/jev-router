@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { contract } from "./contract.js";
 import { candidates, continuationDecision, createRouter, credential, parseConfig, type Decision } from "./router.js";
+import { emptyExclusions, parseExclusions, exclusionReason, changeExclusion } from "./exclusions.js";
 import { Continuity } from "./continuity.js";
 import { classifyFailure } from "./insights.js";
 import { fileHistoryStore, HistoryStore, type RecordRow } from "./history.js";
@@ -20,6 +21,7 @@ const feature = defineFeaturePlugin({
     if (api.config.gateway?.controlUi?.experimental?.customPlugins !== true) {
       api.logger?.warn("Jev Router dashboard is hidden until gateway.controlUi.experimental.customPlugins=true; restart the Gateway after enabling it.");
     }
+    let exclusions=emptyExclusions();
     let activeProfiles=config.profiles;
     let activeMode=config.mode;
     let modeOverride:Preferences["mode"];
@@ -37,6 +39,7 @@ const feature = defineFeaturePlugin({
     }
     const loaded=preferences.load().then(value=>{
       if(!value)return;
+      exclusions=parseExclusions(value.exclusions);
       const saved=parseConfig({...config,...(value.profiles?{profiles:value.profiles}:{}),...(value.optimization?{optimization:value.optimization}:{}),...(value.continuity!==undefined?{continuity:value.continuity}:{}),...(value.mode?{mode:value.mode}:{})});
       activeProfiles=saved.profiles;
       activeMode=saved.mode;
@@ -84,7 +87,7 @@ const feature = defineFeaturePlugin({
         ? (agent.modelPolicy as {allow?:string[]})?.allow : undefined;
       // Intersect policies; never broaden the host's permissions.
       const pool = candidates({...config,profiles:activeProfiles}, defaults,attachments);
-      return readyProfiles(candidates({...config,profiles:pool},own,attachments),api.config,agentId);
+      return await readyProfiles(candidates({...config,profiles:pool},own,attachments),api.config,agentId);
     };
     api.on("before_model_resolve",async (event,ctx) => {
       // Do not reroute host fallback attempts, including after the first attempt failed.
@@ -93,6 +96,12 @@ const feature = defineFeaturePlugin({
       const sessionKey=ctx.sessionKey?JSON.stringify([ctx.agentId??"",ctx.sessionKey]):undefined;
       const previous=continuity.begin(id,sessionKey);
       await loaded;
+      const excluded=exclusionReason(exclusions,ctx.agentId,ctx.sessionKey);
+      if(excluded){
+        if(sessionKey)continuity.end(sessionKey);
+        await put(make({reason:excluded,latencyMs:0},id,"kept_current"));
+        return;
+      }
       const revision=preferenceRevision;
       const profiles=await eligible(ctx.agentId,event.attachments);
       let decision = pinnedModel
@@ -172,7 +181,7 @@ const feature = defineFeaturePlugin({
     };
     type GatewayModel={model:string;provider:string;name:string;input:string[];ready:boolean;configured:boolean};
     let catalogCache:{agentId?:string;expires:number;models:GatewayModel[];warning?:string}|undefined;
-    const configuredCatalog=(agentId?:string) => {
+    const configuredCatalog=async(agentId?:string) => {
       const refs=new Set(Object.keys(api.config.agents?.defaults?.models??{}));
       const add=(value:unknown) => {
         if(typeof value==="string")refs.add(value);
@@ -184,7 +193,7 @@ const feature = defineFeaturePlugin({
       };
       add(api.config.agents?.defaults?.model);add(api.config.agents?.entries?.[agentId??""]?.model);
       const probes=[...refs].filter(model=>/^[a-z0-9_-]+\/[^\s]+$/.test(model)).map((model,index)=>({id:`fallback_${index}`,model,description:"Gateway model",input:["text"]}));
-      const usable=new Set(readyProfiles(probes,api.config,agentId).map(profile=>profile.model));
+      const usable=new Set((await readyProfiles(probes,api.config,agentId)).map(profile=>profile.model));
       const settings=api.config.agents?.defaults?.models??{};
       return probes.map(profile=>{
         const slash=profile.model.indexOf("/"),setting=settings[profile.model] as {alias?:string}|undefined;
@@ -196,13 +205,13 @@ const feature = defineFeaturePlugin({
       if(catalogCache && catalogCache.agentId===agentId && catalogCache.expires>Date.now()) return catalogCache;
       let data;
       try { data=await buildModelsProviderData(api.config,agentId,{view:"default"}); }
-      catch { return catalogCache={agentId,expires:Date.now()+2_000,models:configuredCatalog(agentId),warning:"Gateway catalog is warming up; showing configured models."}; }
-      if(!data.byProvider.size)return catalogCache={agentId,expires:Date.now()+2_000,models:configuredCatalog(agentId),warning:"Gateway catalog is warming up; showing configured models."};
+      catch { return catalogCache={agentId,expires:Date.now()+2_000,models:await configuredCatalog(agentId),warning:"Gateway catalog is warming up; showing configured models."}; }
+      if(!data.byProvider.size)return catalogCache={agentId,expires:Date.now()+2_000,models:await configuredCatalog(agentId),warning:"Gateway catalog is warming up; showing configured models."};
       const probes=[...data.byProvider].flatMap(([provider,models])=>[...models].map((model,index)=>({
         id:`m_${provider}_${index}`,model:`${provider}/${model}`,description:"Gateway model",
         input:["text"],
       })));
-      const usable=new Set(readyProfiles(probes,api.config,agentId).map(profile=>profile.model));
+      const usable=new Set((await readyProfiles(probes,api.config,agentId)).map(profile=>profile.model));
       const models=probes.map(profile=>{
         const slash=profile.model.indexOf("/");
         return {model:profile.model,provider:profile.model.slice(0,slash),
@@ -213,11 +222,12 @@ const feature = defineFeaturePlugin({
       return catalogCache={agentId,expires:Date.now()+30_000,models,...(data.refreshWarning?{warning:data.refreshWarning}:{})};
     };
     let preferenceWrites=Promise.resolve();
-    const savePreferences=(patch:Preferences) => {
+    const savePreferences=(patch:Preferences|(()=>Preferences)) => {
       const write=preferenceWrites.then(async()=>{
       await loaded;
-      const value:Preferences={profiles:activeProfiles,optimization:activeOptimization,continuity:activeContinuity,...(modeOverride?{mode:modeOverride}:{}),...(activeJevKey!==undefined?{jevKey:activeJevKey}:{}),minConfidence:activeMinConfidence,...(pinnedModel?{pinnedModel}:{}),pricing,...patch};
+      const value:Preferences={profiles:activeProfiles,optimization:activeOptimization,continuity:activeContinuity,...(modeOverride?{mode:modeOverride}:{}),...(activeJevKey!==undefined?{jevKey:activeJevKey}:{}),minConfidence:activeMinConfidence,...(pinnedModel?{pinnedModel}:{}),pricing,exclusions,...(typeof patch==="function"?patch():patch)};
       await preferences.save(value);
+      exclusions=parseExclusions(value.exclusions);
       if(value.profiles)activeProfiles=value.profiles;
       if(value.mode){modeOverride=value.mode;activeMode=value.mode;}
       if(value.optimization)activeOptimization=value.optimization;
@@ -281,6 +291,18 @@ const feature = defineFeaturePlugin({
       },
     });
     api.session.controls.registerSessionAction({
+      id:"set_routing_exclusion",description:"Disable automatic routing for one agent or exact session key.",requiredScopes:["operator.admin"],
+      schema:{type:"object",additionalProperties:false,required:["scope","target","disabled"],properties:{scope:{type:"string",enum:["agent","session"]},target:{type:"string",minLength:1,maxLength:512},disabled:{type:"boolean"}}},
+      handler:async ctx=>{
+        const payload=(ctx.payload??{}) as {scope?:unknown;target?:unknown;disabled?:unknown};
+        if((payload.scope!=="agent"&&payload.scope!=="session")||typeof payload.target!=="string"||typeof payload.disabled!=="boolean")return {ok:false,error:"Choose an agent or session and routing state.",code:"INVALID_EXCLUSION"};
+        const {scope,target,disabled}=payload;
+        try { await savePreferences(()=>({exclusions:changeExclusion(exclusions,scope,target,disabled)})); }
+        catch(error){return {ok:false,error:error instanceof Error?error.message:"Could not save routing exclusion.",code:"EXCLUSION_SAVE_FAILED"};}
+        publish();return {ok:true,result:{saved:true}};
+      },
+    });
+    api.session.controls.registerSessionAction({
       id:"set_mode",description:"Enable or pause Jev Router model switching.",requiredScopes:["operator.admin"],
       schema:{type:"object",additionalProperties:false,required:["mode"],properties:{mode:{type:"string",enum:["observe","route"]},agentId:{type:"string",maxLength:256}}},
       handler:async ctx=>{
@@ -316,7 +338,7 @@ const feature = defineFeaturePlugin({
         try { catalog=await discoverModels(agentId); } catch { catalog={models:[],warning:"Gateway model discovery is temporarily unavailable."}; }
         let credentialStatus="configured";
         try { await credential(api.config,activeJevKey); } catch (error) { credentialStatus=(error as Error).message==="credential_missing" ? "missing" : "unreadable"; }
-        return { mode:activeMode,optimization:activeOptimization,continuity:activeContinuity,minConfidence:activeMinConfidence,...(pinnedModel?{pinnedModel}:{}),pricing,
+        return { exclusions, mode:activeMode,optimization:activeOptimization,continuity:activeContinuity,minConfidence:activeMinConfidence,...(pinnedModel?{pinnedModel}:{}),pricing,
         limitations:[
           "Thinking selection is advisory: this host has no per-turn thinking override hook.",
           "Locked native sessions skip model routing. Observed-only records are not routing successes.",

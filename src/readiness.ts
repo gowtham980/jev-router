@@ -1,20 +1,29 @@
-import {
-  ensureAuthProfileStore, isProfileInCooldown, resolveAuthProfileOrder,
-  resolveAgentDir, resolveDefaultAgentId,
-} from "openclaw/plugin-sdk/agent-runtime";
+import * as agentRuntime from "openclaw/plugin-sdk/agent-runtime";
 import { modelAllowed, type Profile } from "./router.js";
 
+const { isProfileInCooldown, resolveAuthProfileOrder, resolveAgentDir, resolveDefaultAgentId } = agentRuntime;
 type HostConfig = NonNullable<Parameters<typeof resolveAuthProfileOrder>[0]["cfg"]>;
-type AuthStore = ReturnType<typeof ensureAuthProfileStore>;
+type AuthStore = agentRuntime.AuthProfileStore;
+type ReadStore = (agentDir: string, options: {
+  config: HostConfig; readOnly: true; allowKeychainPrompt: false;
+  externalCli: {mode: "none"};
+}) => Promise<AuthStore>;
 type ModelProbe = {id:string;model:string};
 
 // Only read host-owned credential state. No refresh, writes, keychain prompts or secrets in results.
 export const hostAuth = {
-  readStore(cfg: HostConfig, agentId?: string): AuthStore {
-    return ensureAuthProfileStore(resolveAgentDir(cfg, agentId ?? resolveDefaultAgentId(cfg)), {
-      config: cfg, readOnly: true, syncExternalCli: false, allowKeychainPrompt: false,
-      externalCli: {mode:"none"},
-    });
+  async readStore(cfg: HostConfig, agentId?: string): Promise<AuthStore> {
+    const agentDir=resolveAgentDir(cfg, agentId ?? resolveDefaultAgentId(cfg));
+    const options={config:cfg,readOnly:true,allowKeychainPrompt:false,externalCli:{mode:"none"}} as const;
+    // 2026.11.7 exports the async loader; 2026.10.5 does not. Prefer async
+    // preparation and retain the read-only sync fallback only for supported
+    // older hosts. Never retry synchronously after an async preparation error.
+    const asyncLoader=(agentRuntime as typeof agentRuntime & {
+      loadAuthProfileStoreForRuntimeAsync?: ReadStore;
+    }).loadAuthProfileStoreForRuntimeAsync;
+    return asyncLoader
+      ? await asyncLoader(agentDir,options)
+      : agentRuntime.loadAuthProfileStoreForRuntime(agentDir,options);
   },
 };
 export function filterReadyProfiles<T extends ModelProbe>(profiles: T[], cfg: HostConfig, store: AuthStore, now=Date.now()) {
@@ -25,9 +34,9 @@ export function filterReadyProfiles<T extends ModelProbe>(profiles: T[], cfg: Ho
     return ids.some(id=>!isProfileInCooldown(store,id,now,model));
   });
 }
-export function readyProfiles<T extends ModelProbe>(profiles: T[], cfg: HostConfig, agentId?:string) {
+export async function readyProfiles<T extends ModelProbe>(profiles: T[], cfg: HostConfig, agentId?:string): Promise<T[]> {
   if (!profiles.length) return profiles;
-  try { return filterReadyProfiles(profiles,cfg,hostAuth.readStore(cfg,agentId)); }
+  try { return filterReadyProfiles(profiles,cfg,await hostAuth.readStore(cfg,agentId)); }
   catch { return []; } // Unknown readiness must not override the host's current selection.
 }
 
